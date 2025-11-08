@@ -1,0 +1,149 @@
+﻿<Window x:Class="Redbright.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Redbright.App"
+        mc:Ignorable="d"
+        Title="Redbright" Height="520" Width="520" Icon="assets/icon_crop.png">
+    <Window.Resources>
+        <Style x:Key="BigRedButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#cc2222" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#cc2222" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#d12a2a"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#b81e1e"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Background="#111111">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24">
+            <Button x:Name="ToggleRedButton"
+                    Width="280" Height="120"
+                    FontSize="24"
+                    Style="{StaticResource BigRedButtonStyle}"
+                    Click="ToggleRedButton_Click"
+                    Content="Turn Screen Red" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Vertical" Margin="24" HorizontalAlignment="Stretch">
+            <TextBlock Text="Brightness (software dimming, keep system brightness at 100%)"
+                       Foreground="#dddddd" Margin="4,0,4,4" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Slider x:Name="BrightnessSlider"
+                        Grid.Column="0"
+                        Minimum="0" Maximum="100"
+                        TickFrequency="10" IsSnapToTickEnabled="False"
+                        IsMoveToPointEnabled="True"
+                        ValueChanged="BrightnessSlider_ValueChanged" />
+                <CheckBox x:Name="PauseBrightnessCheckBox"
+                          Grid.Column="1"
+                          Margin="12,0,0,0"
+                          Foreground="#dddddd"
+                          Content="Pause brightness"
+                          Checked="PauseBrightnessCheckBox_Changed"
+                          Unchecked="PauseBrightnessCheckBox_Changed"/>
+            </Grid>
+            <CheckBox x:Name="StartMinimizedCheckBox"
+                      Margin="2,12,2,0"
+                      Foreground="#dddddd"
+                      Content="Start minimized to tray"
+                      Checked="StartMinimizedCheckBox_Changed"
+                      Unchecked="StartMinimizedCheckBox_Changed"/>
+            <CheckBox x:Name="AutoStartCheckBox"
+                      Margin="2,6,2,0"
+                      Foreground="#dddddd"
+                      Content="Start with Windows"
+                      Checked="AutoStartCheckBox_Changed"
+                      Unchecked="AutoStartCheckBox_Changed"/>
+            <TextBlock Text="Toggle Red" Foreground="#dddddd" Margin="2,12,2,4"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="HotkeyColorTextBox"
+                         Grid.Column="0"
+                         IsReadOnly="True"
+                         HorizontalAlignment="Stretch"
+                         PreviewMouseLeftButtonDown="HotkeyColorTextBox_PreviewMouseLeftButtonDown"
+                         PreviewKeyDown="HotkeyColorTextBox_PreviewKeyDown"
+                         GotFocus="HotkeyColorTextBox_GotFocus"
+                         LostFocus="HotkeyColorTextBox_LostFocus"
+                         Text="None" />
+                <Button Grid.Column="1" Content="Clear" Margin="12,0,0,0" Click="ClearHotkeyColor_Click"/>
+            </Grid>
+
+            <TextBlock Text="Pause/Unpause Brightness" Foreground="#dddddd" Margin="2,12,2,4"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="HotkeyBrightnessTextBox"
+                         Grid.Column="0"
+                         IsReadOnly="True"
+                         HorizontalAlignment="Stretch"
+                         PreviewMouseLeftButtonDown="HotkeyBrightnessTextBox_PreviewMouseLeftButtonDown"
+                         PreviewKeyDown="HotkeyBrightnessTextBox_PreviewKeyDown"
+                         GotFocus="HotkeyBrightnessTextBox_GotFocus"
+                         LostFocus="HotkeyBrightnessTextBox_LostFocus"
+                         Text="None" />
+                <Button Grid.Column="1" Content="Clear" Margin="12,0,0,0" Click="ClearHotkeyBrightness_Click"/>
+            </Grid>
+
+            <TextBlock Text="Toggle Red + Brightness" Foreground="#dddddd" Margin="2,12,2,4"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="HotkeyTextBox"
+                         Grid.Column="0"
+                         IsReadOnly="True"
+                         HorizontalAlignment="Stretch"
+                         PreviewMouseLeftButtonDown="HotkeyTextBox_PreviewMouseLeftButtonDown"
+                         PreviewKeyDown="HotkeyTextBox_PreviewKeyDown"
+                         GotFocus="HotkeyTextBox_GotFocus"
+                         LostFocus="HotkeyTextBox_LostFocus"
+                         Text="None" />
+                <Button Grid.Column="1" Content="Clear" Margin="12,0,0,0" Click="ClearHotkey_Click"/>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</Window>
