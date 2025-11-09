@@ -1,0 +1,22 @@
+# Build outputs
+**/bin/
+**/obj/
+**/publish/
+TestResults/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.csproj.user
+*.DotSettings.user
+
+# Installer
+installer/Output/
+
+# Packages / symbols / logs
+*.nupkg
+*.pdb
+*.log
