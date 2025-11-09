@@ -14,6 +14,8 @@
 AppId={{A4D2F2B8-4E8E-4E01-9A8B-6E7A7E2F7C3B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName}
+UninstallDisplayName={#MyAppName}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\\{#MyAppName}
 DefaultGroupName={#MyAppName}
@@ -23,6 +25,10 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
+; Installer icon (compile-time)
+SetupIconFile=..\\assets\\icon_crop.ico
+; Icon shown in Apps & Features / Uninstall (runtime)
+UninstallDisplayIcon={app}\\{#MyAppExeName}
 
 ; Optional: use app icon for installer
 ; SetupIconFile={#PublishDir}\\assets\\icon_crop.ico
