@@ -20,6 +20,7 @@ namespace Redbright.App;
 	public partial class MainWindow : Window
 {
 		private readonly GammaRampService _gammaService;
+		private readonly MagnificationService _magnificationService;
 		private readonly AppSettings _settings;
 		private bool _initialized;
 		private bool _capturingHotkey;
@@ -61,26 +62,39 @@ namespace Redbright.App;
     {
 			_settings = settings;
         _gammaService = new GammaRampService();
+		_magnificationService = new MagnificationService();
         InitializeComponent();
         InitializeTrayIcon();
 			// Initialize UI from settings
 			BrightnessSlider.Value = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
 			BrightnessSlider.IsEnabled = !_settings.PauseBrightness;
 			PauseBrightnessCheckBox.IsChecked = _settings.PauseBrightness;
+			RemapToRedCheckBox.IsChecked = _settings.RemapColorsToRed;
+			// Removed dev controls (row/column/strategy/gain)
 			StartMinimizedCheckBox.IsChecked = _settings.StartMinimizedToTray;
+			CloseMinimizeCheckBox.IsChecked = _settings.CloseMinimizesToTray;
 			_updatingAutoStartUi = true;
 			AutoStartCheckBox.IsChecked = IsAutoStartEnabled();
 			_updatingAutoStartUi = false;
 			LoggingEnabledCheckBox.IsChecked = _settings.LoggingEnabled;
 			UpdateLogLinkText();
 			UpdateHotkeyText();
+			_colorOnlyActive = _settings.RedOnlyActive;
+			var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
 			if (_settings.RedOnlyActive)
 			{
-				_gammaService.ApplyRedOnlyBrightness(_settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent);
+				if (_settings.RemapColorsToRed)
+				{
+					ApplyCompatEnable(effective);
+				}
+				else
+				{
+					_gammaService.ApplyRedOnlyBrightness(effective);
+				}
 			}
 			else
 			{
-				_gammaService.ApplyBrightnessOnly(_settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent);
+				_gammaService.ApplyBrightnessOnly(effective);
 			}
 			_initialized = true;
         UpdateMenuTexts();
@@ -290,6 +304,20 @@ namespace Redbright.App;
 		catch { }
 	}
 
+	private void ApplyCompatEnable(double effectiveBrightness)
+	{
+		// Fixed compat: Gamma red-only + Grayscale overlay with max gain
+		_gammaService.ApplyRedOnlyBrightness(effectiveBrightness);
+		_ = _magnificationService.EnableGrayscale(1.6f);
+	}
+
+	private void ApplyCompatDisable()
+	{
+		_magnificationService.Disable();
+	}
+
+	// Removed dev/testing handlers (row/column/strategy/gain) for fixed compat approach
+
     // Removed old ToggleBoth; unified on ToggleBothWithPause
 
     private void ToggleBothWithPause()
@@ -308,9 +336,16 @@ namespace Redbright.App;
                 BrightnessSlider.IsEnabled = false;
             }
             BrightnessSlider.Value = 100.0;
-            _gammaService.ApplyRedOnlyBrightness(100.0);
+			if (_settings.RemapColorsToRed)
+			{
+				ApplyCompatEnable(100.0);
+			}
+			else
+			{
+				_gammaService.ApplyRedOnlyBrightness(100.0);
+			}
             _settings.RedOnlyActive = true;
-            _colorOnlyActive = false;
+            _colorOnlyActive = true;
         }
         else
         {
@@ -318,6 +353,10 @@ namespace Redbright.App;
 			AppLogger.LogChange("RedOnlyActive", true, false);
             _settings.RedOnlyActive = false;
             _colorOnlyActive = false;
+			if (_settings.RemapColorsToRed)
+			{
+				ApplyCompatDisable();
+			}
 
             if (_settings.PauseBrightness)
             {
@@ -391,6 +430,10 @@ namespace Redbright.App;
 			// Re-apply brightness-only with current effective brightness
 			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
 			_gammaService.ApplyBrightnessOnly(effectiveBrightness);
+			if (_settings.RemapColorsToRed)
+			{
+				_magnificationService.Disable();
+			}
 			AppLogger.LogChange("RedOnlyActive", true, false);
 			_settings.RedOnlyActive = false;
 		}
@@ -398,7 +441,14 @@ namespace Redbright.App;
 		{
 			// Apply red-only honoring current brightness or pause
 			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-			_gammaService.ApplyRedOnlyBrightness(effectiveBrightness);
+			if (_settings.RemapColorsToRed)
+			{
+				ApplyCompatEnable(effectiveBrightness);
+			}
+			else
+			{
+				_gammaService.ApplyRedOnlyBrightness(effectiveBrightness);
+			}
 			_colorOnlyActive = true;
 			AppLogger.LogChange("RedOnlyActive", false, true);
 			_settings.RedOnlyActive = true;
@@ -442,7 +492,7 @@ namespace Redbright.App;
 
     private void UpdateMenuTexts()
     {
-        ToggleRedButton.Content = _gammaService.IsRedOnlyActive ? "Restore Normal Colors" : "Turn Screen Red";
+        ToggleRedButton.Content = _colorOnlyActive ? "Restore Normal Colors" : "Turn Screen Red";
         if (_toggleColorMenuItem != null) _toggleColorMenuItem.Text = "Toggle Red";
         if (_toggleMenuItem != null) _toggleMenuItem.Text = "Toggle Red + Brightness";
         if (_pauseBrightnessMenuItem != null) _pauseBrightnessMenuItem.Text = "Pause/Unpause Brightness";
@@ -857,7 +907,7 @@ namespace Redbright.App;
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_allowClose)
+        if (!_allowClose && _settings.CloseMinimizesToTray)
         {
             e.Cancel = true;
             HideToTray();
@@ -874,12 +924,17 @@ namespace Redbright.App;
             {
                 _gammaService.RestoreOriginal();
             }
+			if (_magnificationService != null && _magnificationService.IsActive)
+			{
+				_magnificationService.Disable();
+			}
             UnregisterAllHotkeys();
             SettingsStorage.Save(_settings);
         }
         finally
         {
             _gammaService.Dispose();
+			_magnificationService.Dispose();
             if (_notifyIcon != null)
             {
                 _notifyIcon.Visible = false;
@@ -894,4 +949,41 @@ namespace Redbright.App;
         }
         base.OnClosed(e);
     }
+
+	private void RemapToRedCheckBox_Changed(object sender, RoutedEventArgs e)
+	{
+		if (!_initialized) return;
+		var desired = RemapToRedCheckBox.IsChecked == true;
+		var old = _settings.RemapColorsToRed;
+		_settings.RemapColorsToRed = desired;
+		AppLogger.LogChange("RemapColorsToRed", old, desired);
+
+		// If color-only currently active, switch implementation accordingly
+		var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+		if (_colorOnlyActive)
+		{
+			if (desired)
+			{
+				ApplyCompatEnable(effective);
+			}
+			else
+			{
+				// Remove overlay; continue red-only gamma
+				ApplyCompatDisable();
+				_gammaService.ApplyRedOnlyBrightness(effective);
+			}
+		}
+		SettingsStorage.Save(_settings);
+	}
+
+	// Removed RemapRowComboBox_Changed since dev controls were removed
+
+	private void CloseMinimizeCheckBox_Changed(object sender, RoutedEventArgs e)
+	{
+		if (!_initialized) return;
+		var old = _settings.CloseMinimizesToTray;
+		_settings.CloseMinimizesToTray = CloseMinimizeCheckBox.IsChecked == true;
+		AppLogger.LogChange("CloseMinimizesToTray", old, _settings.CloseMinimizesToTray);
+		SettingsStorage.Save(_settings);
+	}
 }

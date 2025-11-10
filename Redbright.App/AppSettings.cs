@@ -9,6 +9,12 @@ public sealed class AppSettings
 	public bool StartMinimizedToTray { get; set; } = false;
 	public double BrightnessPercent { get; set; } = 100.0;
 	public bool RedOnlyActive { get; set; } = false;
+	public bool RemapColorsToRed { get; set; } = true;
+	public int RemapRowIndex { get; set; } = 0;
+	public int RemapColumnOrder { get; set; } = 0; // 0=RGB, 1=BGR, 2=GBR
+	public int RemapStrategy { get; set; } = 1; // 0=GammaRedOnly, 1=RedLuminanceOverlay, 2=Grayscale+GammaRedOnly, 3=AdvancedRedMix
+	public double RemapGain { get; set; } = 1.0;
+	public bool CloseMinimizesToTray { get; set; } = true;
 	public bool PauseBrightness { get; set; } = false;
 	public double SavedBrightnessBeforePause { get; set; } = 100.0;
 	public bool AutoStart { get; set; } = false;

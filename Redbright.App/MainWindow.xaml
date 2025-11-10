@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Redbright.App"
         mc:Ignorable="d"
-        Title="Redbright" Height="520" Width="520" Icon="assets/icon_crop.png">
+        Title="Redbright" Height="640" Width="600" Icon="assets/icon_crop.png">
     <Window.Resources>
         <Style x:Key="BigRedButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#cc2222" />
@@ -79,12 +79,24 @@
                           Checked="PauseBrightnessCheckBox_Changed"
                           Unchecked="PauseBrightnessCheckBox_Changed"/>
             </Grid>
+            <CheckBox x:Name="RemapToRedCheckBox"
+                      Margin="2,6,2,0"
+                      Foreground="#dddddd"
+                      Content="Grayscale before turning red"
+                      Checked="RemapToRedCheckBox_Changed"
+                      Unchecked="RemapToRedCheckBox_Changed"/>
             <CheckBox x:Name="StartMinimizedCheckBox"
                       Margin="2,12,2,0"
                       Foreground="#dddddd"
                       Content="Start minimized to tray"
                       Checked="StartMinimizedCheckBox_Changed"
                       Unchecked="StartMinimizedCheckBox_Changed"/>
+            <CheckBox x:Name="CloseMinimizeCheckBox"
+                      Margin="2,6,2,0"
+                      Foreground="#dddddd"
+                      Content="Close minimizes to tray"
+                      Checked="CloseMinimizeCheckBox_Changed"
+                      Unchecked="CloseMinimizeCheckBox_Changed"/>
             <CheckBox x:Name="AutoStartCheckBox"
                       Margin="2,6,2,0"
                       Foreground="#dddddd"
