@@ -20,3 +20,5 @@ installer/Output/
 *.nupkg
 *.pdb
 *.log
+
+ACTION_LOG.md

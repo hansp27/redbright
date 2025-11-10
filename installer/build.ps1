@@ -25,6 +25,15 @@ if (!(Test-Path $publishDir)) {
 Write-Host "Publish directory: $publishDir" -ForegroundColor Green
 
 $issPath = Resolve-Path ".\Redbright.iss"
+# Reminder to update version for releases
+$versionReminderMatch = Select-String -Path $issPath -Pattern '^\s*#define\s+MyAppVersion\s+"([^"]+)"'
+if ($versionReminderMatch) {
+    $currentIssVersion = $versionReminderMatch.Matches[0].Groups[1].Value
+    Write-Host "Current installer version (MyAppVersion): $currentIssVersion" -ForegroundColor Cyan
+    Write-Host "Reminder: Ensure MyAppVersion in installer\Redbright.iss is updated before releasing." -ForegroundColor Yellow
+} else {
+    Write-Warning "Could not read MyAppVersion from Redbright.iss. Please update it before releasing."
+}
 if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue)) {
     Write-Warning "Inno Setup compiler (iscc.exe) not found in PATH. Skipping installer compile."
     Write-Host "You can compile manually in Inno Setup using installer\Redbright.iss" -ForegroundColor Yellow
