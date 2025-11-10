@@ -63,7 +63,10 @@ Notes:
 
 - Global crash handling writes logs to:
   `%LocalAppData%\Redbright\logs\crash-YYYYMMDD-HHMMSS.txt`
-- If the app crashes, you’ll see a message with the log path. Share the log to help diagnose.
+
+## Issues & Features 
+
+- Issues, suggestions and pull requests are very welcome 😊✨
 
 ## Build (Developer)
 
