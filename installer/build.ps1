@@ -36,3 +36,18 @@ Write-Host "Compiling Inno Setup installer..." -ForegroundColor Cyan
 Write-Host "Installer build finished." -ForegroundColor Green
 
 
+# Generate SHA-256 checksum for the installer using certutil
+$issDir = Split-Path -Path $issPath -Parent
+$outputDir = Join-Path -Path $issDir -ChildPath "Output"
+$installerPath = Join-Path -Path $outputDir -ChildPath "Redbright-Setup.exe"
+if (Test-Path $installerPath) {
+    Write-Host "Generating SHA-256 checksum for Redbright-Setup.exe..." -ForegroundColor Cyan
+    try {
+        certutil -hashfile $installerPath SHA256 | Set-Content -Path "$installerPath.sha256"
+        Write-Host "Wrote checksum file: $installerPath.sha256" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to generate SHA-256 checksum: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warning "Installer not found at: $installerPath. Skipping checksum generation."
+}

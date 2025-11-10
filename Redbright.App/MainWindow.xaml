@@ -91,6 +91,23 @@
                       Content="Start with Windows"
                       Checked="AutoStartCheckBox_Changed"
                       Unchecked="AutoStartCheckBox_Changed"/>
+            <Grid Margin="2,6,2,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <CheckBox x:Name="LoggingEnabledCheckBox"
+                          Grid.Column="0"
+                          Foreground="#dddddd"
+                          Content="Enable logging"
+                          Checked="LoggingEnabledCheckBox_Changed"
+                          Unchecked="LoggingEnabledCheckBox_Changed"/>
+                <TextBlock Grid.Column="1"
+                           Margin="12,0,0,0"
+                           Foreground="#dddddd">
+                    <Hyperlink x:Name="OpenLogHyperlink" Click="OpenLogHyperlink_Click">Open log</Hyperlink>
+                </TextBlock>
+            </Grid>
             <TextBlock Text="Toggle Red" Foreground="#dddddd" Margin="2,12,2,4"/>
             <Grid>
                 <Grid.ColumnDefinitions>

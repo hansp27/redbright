@@ -71,7 +71,15 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         try
         {
-            var settings = SettingsStorage.Load();
+			var settings = SettingsStorage.Load();
+			// Ensure logger state aligns with loaded settings
+			AppLogger.SetEnabled(settings.LoggingEnabled);
+			if (AppLogger.IsEnabled)
+			{
+				AppLogger.EnsureLogFile();
+				AppLogger.Log("[lifecycle] App.OnStartup");
+				AppLogger.LogConfigSnapshot("Working configuration (post-load, in-memory)", settings);
+			}
             var main = new MainWindow(settings);
             MainWindow = main;
             main.Show();

@@ -10,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using System.Diagnostics;
 
 namespace Redbright.App;
 
@@ -70,6 +71,8 @@ namespace Redbright.App;
 			_updatingAutoStartUi = true;
 			AutoStartCheckBox.IsChecked = IsAutoStartEnabled();
 			_updatingAutoStartUi = false;
+			LoggingEnabledCheckBox.IsChecked = _settings.LoggingEnabled;
+			UpdateLogLinkText();
 			UpdateHotkeyText();
 			if (_settings.RedOnlyActive)
 			{
@@ -100,6 +103,7 @@ namespace Redbright.App;
     private void BrightnessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_gammaService == null || !_initialized || _settings.PauseBrightness) return;
+		AppLogger.LogChange("BrightnessPercent", e.OldValue, e.NewValue);
         ReconcileColorState();
         if (_gammaService.IsRedOnlyActive)
         {
@@ -272,14 +276,30 @@ namespace Redbright.App;
         }
     }
 
+	private void UpdateLogLinkText()
+	{
+		try
+		{
+			var path = AppLogger.GetCurrentAppLogPath();
+			if (OpenLogHyperlink != null)
+			{
+				OpenLogHyperlink.Inlines.Clear();
+				OpenLogHyperlink.Inlines.Add(path);
+			}
+		}
+		catch { }
+	}
+
     // Removed old ToggleBoth; unified on ToggleBothWithPause
 
     private void ToggleBothWithPause()
     {
         if (!_settings.RedOnlyActive)
         {
+			AppLogger.LogChange("RedOnlyActive", false, true);
             if (!_settings.PauseBrightness)
             {
+				AppLogger.LogChange("PauseBrightness", false, true);
                 _settings.SavedBrightnessBeforePause = _settings.BrightnessPercent;
                 _settings.PauseBrightness = true;
                 _updatingPauseUi = true;
@@ -295,11 +315,13 @@ namespace Redbright.App;
         else
         {
             // Avoid flicker by applying brightness-only directly without restoring first
+			AppLogger.LogChange("RedOnlyActive", true, false);
             _settings.RedOnlyActive = false;
             _colorOnlyActive = false;
 
             if (_settings.PauseBrightness)
             {
+				AppLogger.LogChange("PauseBrightness", true, false);
                 _settings.PauseBrightness = false;
                 _updatingPauseUi = true;
                 PauseBrightnessCheckBox.IsChecked = false;
@@ -321,6 +343,7 @@ namespace Redbright.App;
 		if (_settings.PauseBrightness)
 		{
 			// Unpause: restore previous brightness, enable slider
+			AppLogger.LogChange("PauseBrightness", true, false);
 			_settings.PauseBrightness = false;
 			_updatingPauseUi = true;
 			PauseBrightnessCheckBox.IsChecked = false;
@@ -340,6 +363,7 @@ namespace Redbright.App;
 		{
 			// Pause: store current brightness, set to 100 and lock slider
 			_settings.SavedBrightnessBeforePause = _settings.BrightnessPercent;
+			AppLogger.LogChange("PauseBrightness", false, true);
 			_settings.PauseBrightness = true;
 			_updatingPauseUi = true;
 			PauseBrightnessCheckBox.IsChecked = true;
@@ -367,6 +391,7 @@ namespace Redbright.App;
 			// Re-apply brightness-only with current effective brightness
 			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
 			_gammaService.ApplyBrightnessOnly(effectiveBrightness);
+			AppLogger.LogChange("RedOnlyActive", true, false);
 			_settings.RedOnlyActive = false;
 		}
 		else
@@ -375,6 +400,7 @@ namespace Redbright.App;
 			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
 			_gammaService.ApplyRedOnlyBrightness(effectiveBrightness);
 			_colorOnlyActive = true;
+			AppLogger.LogChange("RedOnlyActive", false, true);
 			_settings.RedOnlyActive = true;
 		}
 	}
@@ -444,6 +470,56 @@ namespace Redbright.App;
         UpdateMenuTexts();
     }
 
+	private void LoggingEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
+	{
+		_settings.LoggingEnabled = LoggingEnabledCheckBox.IsChecked == true;
+		AppLogger.SetEnabled(_settings.LoggingEnabled);
+		if (_settings.LoggingEnabled)
+		{
+			AppLogger.EnsureLogFile();
+			AppLogger.LogResult("logging.toggled", true, "enabled=true");
+			// Dump saved vs working snapshot when turning on
+			try
+			{
+				var saved = SettingsStorage.Load();
+				AppLogger.LogSavedAndWorking(saved, _settings);
+			}
+			catch (Exception ex)
+			{
+				if (AppLogger.IsEnabled) AppLogger.LogResult("logging.dump", false, ex.Message);
+			}
+		}
+		else
+		{
+			AppLogger.LogResult("logging.toggled", true, "enabled=false");
+		}
+		SettingsStorage.Save(_settings);
+		UpdateLogLinkText();
+	}
+
+	private void OpenLogHyperlink_Click(object sender, RoutedEventArgs e)
+	{
+		try
+		{
+			AppLogger.EnsureLogFile();
+			var path = AppLogger.GetCurrentAppLogPath();
+			var psi = new ProcessStartInfo
+			{
+				FileName = path,
+				UseShellExecute = true
+			};
+			Process.Start(psi);
+		}
+		catch
+		{
+			try
+			{
+				System.Windows.MessageBox.Show(this, "Could not open the log file.", "Redbright", MessageBoxButton.OK, MessageBoxImage.Warning);
+			}
+			catch { }
+		}
+	}
+
     private void SetHotkey_Click(object sender, RoutedEventArgs e)
     {
         _capturingHotkey = true;
@@ -453,9 +529,11 @@ namespace Redbright.App;
 
     private void ClearHotkey_Click(object sender, RoutedEventArgs e)
     {
+		var old = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
         UnregisterAllHotkeys();
         _settings.HotkeyModifiers = 0;
         _settings.HotkeyVirtualKey = 0;
+		AppLogger.LogChange("HotkeyBoth", old, "None");
         SettingsStorage.Save(_settings);
         UpdateHotkeyText();
         RegisterConfiguredHotkeys();
@@ -463,9 +541,11 @@ namespace Redbright.App;
 
     private void ClearHotkeyBrightness_Click(object sender, RoutedEventArgs e)
     {
+		var old = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
         UnregisterAllHotkeys();
         _settings.HotkeyBrightnessModifiers = 0;
         _settings.HotkeyBrightnessVirtualKey = 0;
+		AppLogger.LogChange("HotkeyBrightness", old, "None");
         SettingsStorage.Save(_settings);
         UpdateHotkeyText();
         RegisterConfiguredHotkeys();
@@ -473,9 +553,11 @@ namespace Redbright.App;
 
     private void ClearHotkeyColor_Click(object sender, RoutedEventArgs e)
     {
+		var old = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
         UnregisterAllHotkeys();
         _settings.HotkeyColorModifiers = 0;
         _settings.HotkeyColorVirtualKey = 0;
+		AppLogger.LogChange("HotkeyColor", old, "None");
         SettingsStorage.Save(_settings);
         UpdateHotkeyText();
         RegisterConfiguredHotkeys();
@@ -557,18 +639,27 @@ namespace Redbright.App;
         UnregisterAllHotkeys();
         if (_captureSlot == HotkeySlot.Both)
         {
+			var oldDisp = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
             _settings.HotkeyModifiers = (int)mods;
             _settings.HotkeyVirtualKey = vk;
+			var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
+			AppLogger.LogChange("HotkeyBoth", oldDisp, newDisp);
         }
         else if (_captureSlot == HotkeySlot.Brightness)
         {
+			var oldDisp = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
             _settings.HotkeyBrightnessModifiers = (int)mods;
             _settings.HotkeyBrightnessVirtualKey = vk;
+			var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
+			AppLogger.LogChange("HotkeyBrightness", oldDisp, newDisp);
         }
         else if (_captureSlot == HotkeySlot.Color)
         {
+			var oldDisp = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
             _settings.HotkeyColorModifiers = (int)mods;
             _settings.HotkeyColorVirtualKey = vk;
+			var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
+			AppLogger.LogChange("HotkeyColor", oldDisp, newDisp);
         }
         SettingsStorage.Save(_settings);
         RegisterConfiguredHotkeys();
@@ -716,7 +807,9 @@ namespace Redbright.App;
 
 		private void StartMinimizedCheckBox_Changed(object sender, RoutedEventArgs e)
 		{
+		var old = _settings.StartMinimizedToTray;
 			_settings.StartMinimizedToTray = StartMinimizedCheckBox.IsChecked == true;
+		AppLogger.LogChange("StartMinimizedToTray", old, _settings.StartMinimizedToTray);
 			SettingsStorage.Save(_settings);
 		}
 
@@ -724,6 +817,7 @@ namespace Redbright.App;
     {
         if (_updatingAutoStartUi) return;
         var desired = AutoStartCheckBox.IsChecked == true;
+		var previous = _settings.AutoStart;
         bool success = false;
         try
         {
@@ -735,6 +829,7 @@ namespace Redbright.App;
         {
             success = false;
         }
+		AppLogger.LogResult("autostart.set", success, $"desired={desired}");
         if (!success)
         {
             _updatingAutoStartUi = true;
@@ -750,6 +845,7 @@ namespace Redbright.App;
             return;
         }
         _settings.AutoStart = desired;
+		AppLogger.LogChange("AutoStart", previous, _settings.AutoStart);
         SettingsStorage.Save(_settings);
     }
 

@@ -18,6 +18,7 @@ public sealed class AppSettings
 	public int HotkeyBrightnessVirtualKey { get; set; } = 0;
 	public int HotkeyColorModifiers { get; set; } = 0;
 	public int HotkeyColorVirtualKey { get; set; } = 0;
+	public bool LoggingEnabled { get; set; } = false;
 }
 
 public static class SettingsStorage
@@ -27,7 +28,7 @@ public static class SettingsStorage
 		WriteIndented = true
 	};
 
-	private static string GetSettingsPath()
+		private static string GetSettingsPath()
 	{
 		var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 		var dir = Path.Combine(root, "Redbright");
@@ -47,13 +48,29 @@ public static class SettingsStorage
 				if (loaded != null)
 				{
 					loaded.BrightnessPercent = Math.Clamp(loaded.BrightnessPercent, 0.0, 100.0);
+						// If logging is enabled in saved settings, enable and log snapshot
+						if (loaded.LoggingEnabled)
+						{
+							AppLogger.SetEnabled(true);
+							AppLogger.LogResult("settings.load", true, $"path={path}");
+							AppLogger.LogConfigSnapshot("Saved configuration (on disk)", loaded);
+						}
 					return loaded;
 				}
 			}
+				// If file missing and logger already enabled, note retrieval failure
+				if (AppLogger.IsEnabled)
+				{
+					AppLogger.LogResult("settings.load", false, "settings file not found");
+				}
 		}
-		catch
+			catch (Exception ex)
 		{
-			// swallow and fall back to defaults
+				// swallow and fall back to defaults
+				if (AppLogger.IsEnabled)
+				{
+					AppLogger.LogResult("settings.load", false, ex.Message);
+				}
 		}
 		return new AppSettings();
 	}
@@ -66,10 +83,20 @@ public static class SettingsStorage
 			settings.BrightnessPercent = Math.Clamp(settings.BrightnessPercent, 0.0, 100.0);
 			var json = JsonSerializer.Serialize(settings, JsonOptions);
 			File.WriteAllText(path, json);
+				if (settings.LoggingEnabled)
+				{
+					AppLogger.SetEnabled(true);
+					AppLogger.LogResult("settings.save", true, $"path={path}");
+					AppLogger.LogConfigSnapshot("Saved configuration (on disk) after save", settings);
+				}
 		}
-		catch
+			catch (Exception ex)
 		{
-			// ignore persistence errors
+				// ignore persistence errors
+				if (AppLogger.IsEnabled)
+				{
+					AppLogger.LogResult("settings.save", false, ex.Message);
+				}
 		}
 	}
 }
