@@ -2,9 +2,14 @@
 ; Requires Inno Setup 6.x (iscc.exe)
 
 #define MyAppName "Redbright"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.2"
 #define MyAppPublisher "Redbright"
 #define MyAppExeName "Redbright.App.exe"
+
+; Architecture tag (can be overridden via iscc.exe /DMyArch=...)
+#ifndef MyArch
+#define MyArch "x64"
+#endif
 
 ; Path to published binaries (self-contained or framework-dependent)
 ; Adjust if your publish path differs
@@ -20,7 +25,9 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename=Redbright-Setup
+; Output file naming (includes version and arch)
+; Example: Redbright-1.1.0-x64-Setup.exe
+OutputBaseFilename={#MyAppName}-{#MyAppVersion}-{#MyArch}-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

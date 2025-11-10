@@ -32,19 +32,38 @@ if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Compiling Inno Setup installer..." -ForegroundColor Cyan
-& iscc.exe $issPath
+# Derive architecture tag from RID (e.g., win-x64 -> x64)
+$arch = "x64"
+if ($Rid -match 'win-(.+)$') { $arch = $Matches[1] }
+& iscc.exe $issPath /DMyArch=$arch
 Write-Host "Installer build finished." -ForegroundColor Green
 
 
 # Generate SHA-256 checksum for the installer using certutil
 $issDir = Split-Path -Path $issPath -Parent
 $outputDir = Join-Path -Path $issDir -ChildPath "Output"
-$installerPath = Join-Path -Path $outputDir -ChildPath "Redbright-Setup.exe"
+# Determine app name and version from the Inno Setup script
+$nameMatch = Select-String -Path $issPath -Pattern '^\s*#define\s+MyAppName\s+"([^"]+)"'
+$versionMatch = Select-String -Path $issPath -Pattern '^\s*#define\s+MyAppVersion\s+"([^"]+)"'
+$appName = if ($nameMatch) { $nameMatch.Matches[0].Groups[1].Value } else { "Redbright" }
+$appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
+$installerFileName = "$appName-$appVersion-$arch-Setup.exe"
+$installerPath = Join-Path -Path $outputDir -ChildPath $installerFileName
+# Fallback to legacy filename if needed
+if (!(Test-Path $installerPath)) {
+    $fallback1 = Join-Path -Path $outputDir -ChildPath "$appName-$appVersion-Setup.exe"
+    if (Test-Path $fallback1) {
+        $installerPath = $fallback1
+    } else {
+        $installerPath = Join-Path -Path $outputDir -ChildPath "Redbright-Setup.exe"
+    }
+}
 if (Test-Path $installerPath) {
-    Write-Host "Generating SHA-256 checksum for Redbright-Setup.exe..." -ForegroundColor Cyan
+    Write-Host "Generating SHA-256 checksum for $(Split-Path -Leaf $installerPath)..." -ForegroundColor Cyan
     try {
-        certutil -hashfile $installerPath SHA256 | Set-Content -Path "$installerPath.sha256"
-        Write-Host "Wrote checksum file: $installerPath.sha256" -ForegroundColor Green
+        $checksumPath = "$installerPath.sha256.txt"
+        certutil -hashfile $installerPath SHA256 | Set-Content -Path $checksumPath
+        Write-Host "Wrote checksum file: $checksumPath" -ForegroundColor Green
     } catch {
         Write-Warning "Failed to generate SHA-256 checksum: $($_.Exception.Message)"
     }
