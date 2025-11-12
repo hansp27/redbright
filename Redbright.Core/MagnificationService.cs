@@ -113,12 +113,6 @@ public sealed class MagnificationService : IDisposable
 		EnsureInitialized();
 		if (!_initialized) return false;
 		if (gain <= 0) gain = 1.0f;
-		// Only reset to identity when an effect is already active; avoid extra state changes on first apply
-		if (_active)
-		{
-			var identity = BuildIdentity();
-			_ = MagSetFullscreenColorEffect(ref identity);
-		}
 		var effect = BuildGrayscaleMatrix(0.2126f, 0.7152f, 0.0722f, gain);
 		var ok = MagSetFullscreenColorEffect(ref effect);
 		_active = ok && _initialized;
@@ -195,12 +189,24 @@ public sealed class MagnificationService : IDisposable
 		return _active;
 	}
 
+	/// <summary>
+	/// Apply identity transform. When keepActive is true, we leave the magnifier considered active
+	/// to avoid teardown/reinit artifacts between transitions.
+	/// </summary>
+	public bool SetIdentity(bool keepActive = true)
+	{
+		EnsureInitialized();
+		if (!_initialized) return false;
+		var identity = BuildIdentity();
+		var ok = MagSetFullscreenColorEffect(ref identity);
+		_active = keepActive && ok && _initialized;
+		return ok;
+	}
+
 	public void Disable()
 	{
 		if (!_initialized) return;
-		var identity = BuildIdentity();
-		_ = MagSetFullscreenColorEffect(ref identity);
-		_active = false;
+		_ = SetIdentity(keepActive: false);
 	}
 
 	public bool IsActive => _active;

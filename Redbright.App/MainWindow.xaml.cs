@@ -464,11 +464,30 @@ namespace Redbright.App;
 			_colorOnlyActive = false;
 			// Re-apply brightness-only with current effective brightness
 			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+			// Step 1 (reverse of enable step 2): remove grayscale overlay by setting identity (keep active)
 			if (_settings.RemapColorsToRed)
 			{
-				_magnificationService.Disable();
+				_magnificationService.SetIdentity(keepActive: true);
 			}
-			_gammaService.ApplyBrightnessOnly(effectiveBrightness);
+			// Step 2 (reverse of enable step 1): switch gamma back to brightness-only
+			// If grayscale was enabled, delay slightly to let the identity overlay settle
+			if (_settings.RemapColorsToRed)
+			{
+				var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render)
+				{
+					Interval = TimeSpan.FromMilliseconds(24)
+				};
+				timer.Tick += (s, e) =>
+				{
+					timer.Stop();
+					_gammaService.ApplyBrightnessOnly(effectiveBrightness);
+				};
+				timer.Start();
+			}
+			else
+			{
+				_gammaService.ApplyBrightnessOnly(effectiveBrightness);
+			}
 			AppLogger.LogChange("RedOnlyActive", true, false);
 			_settings.RedOnlyActive = false;
 		}
@@ -955,13 +974,19 @@ namespace Redbright.App;
     {
         try
         {
-            if (_gammaService.IsRedOnlyActive)
-            {
-                _gammaService.RestoreOriginal();
-            }
-			if (_magnificationService != null && _magnificationService.IsActive)
+			// Disable magnification first when grayscale path was used
+			if (_magnificationService != null && (_magnificationService.IsActive || _settings.RemapColorsToRed))
 			{
 				_magnificationService.Disable();
+				// Wait ~1 frame before restoring gamma to avoid transient green flash
+				if (_settings.RemapColorsToRed)
+				{
+					System.Threading.Thread.Sleep(24);
+				}
+			}
+			if (_gammaService.IsRedOnlyActive)
+			{
+				_gammaService.RestoreOriginal();
 			}
             UnregisterAllHotkeys();
             SettingsStorage.Save(_settings);
