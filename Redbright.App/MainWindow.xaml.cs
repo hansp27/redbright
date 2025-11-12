@@ -464,11 +464,11 @@ namespace Redbright.App;
 			_colorOnlyActive = false;
 			// Re-apply brightness-only with current effective brightness
 			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-			_gammaService.ApplyBrightnessOnly(effectiveBrightness);
 			if (_settings.RemapColorsToRed)
 			{
 				_magnificationService.Disable();
 			}
+			_gammaService.ApplyBrightnessOnly(effectiveBrightness);
 			AppLogger.LogChange("RedOnlyActive", true, false);
 			_settings.RedOnlyActive = false;
 		}

@@ -113,9 +113,12 @@ public sealed class MagnificationService : IDisposable
 		EnsureInitialized();
 		if (!_initialized) return false;
 		if (gain <= 0) gain = 1.0f;
-		// Reset to identity first to avoid transient color artifacts on some systems
-		var identity = BuildIdentity();
-		_ = MagSetFullscreenColorEffect(ref identity);
+		// Only reset to identity when an effect is already active; avoid extra state changes on first apply
+		if (_active)
+		{
+			var identity = BuildIdentity();
+			_ = MagSetFullscreenColorEffect(ref identity);
+		}
 		var effect = BuildGrayscaleMatrix(0.2126f, 0.7152f, 0.0722f, gain);
 		var ok = MagSetFullscreenColorEffect(ref effect);
 		_active = ok && _initialized;

@@ -73,6 +73,7 @@ public partial class App : System.Windows.Application
 			var settings = SettingsStorage.Load();
 			// Ensure logger state aligns with loaded settings
 			AppLogger.SetEnabled(settings.LoggingEnabled);
+			var forceShow = Array.Exists(e.Args, a => string.Equals(a, "--force-show", StringComparison.OrdinalIgnoreCase));
 			if (AppLogger.IsEnabled)
 			{
 				AppLogger.EnsureLogFile();
@@ -81,7 +82,11 @@ public partial class App : System.Windows.Application
 			}
 			var main = new MainWindow(settings);
 			MainWindow = main;
-			if (settings.StartMinimizedToTray)
+			if (forceShow)
+			{
+				main.Show();
+			}
+			else if (settings.StartMinimizedToTray)
 			{
 				// Create HWND (fires SourceInitialized → hotkeys register) without showing the window.
 				_ = new WindowInteropHelper(main).EnsureHandle();

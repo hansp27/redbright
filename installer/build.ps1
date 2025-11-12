@@ -79,3 +79,18 @@ if (Test-Path $installerPath) {
 } else {
     Write-Warning "Installer not found at: $installerPath. Skipping checksum generation."
 }
+
+# Open Explorer to the installer output directory (select the installer if present)
+if (Test-Path $outputDir) {
+    try {
+        if (Test-Path $installerPath) {
+            Write-Host "Opening Explorer to select: $installerPath" -ForegroundColor Cyan
+            Start-Process explorer.exe -ArgumentList "/select,`"$installerPath`""
+        } else {
+            Write-Host "Opening Explorer at: $outputDir" -ForegroundColor Cyan
+            Start-Process explorer.exe -ArgumentList "`"$outputDir`""
+        }
+    } catch {
+        Write-Warning "Failed to open Explorer: $($_.Exception.Message)"
+    }
+}

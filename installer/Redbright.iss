@@ -2,7 +2,7 @@
 ; Requires Inno Setup 6.x (iscc.exe)
 
 #define MyAppName "Redbright"
-#define MyAppVersion "1.2.1"
+#define MyAppVersion "1.2.2"
 #define MyAppPublisher "Redbright"
 #define MyAppExeName "Redbright.App.exe"
 
@@ -16,7 +16,7 @@
 #define PublishDir "..\\Redbright.App\\bin\\Release\\net8.0-windows\\win-x64\\publish"
 
 [Setup]
-AppId={{A4D2F2B8-4E8E-4E01-9A8B-6E7A7E2F7C3B}
+AppId={{A4D2F2B8-4E8E-4E01-9A8B-6E7A7E2F7C3B}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName}
@@ -55,9 +55,36 @@ Name: "{group}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; WorkingDir: "
 Name: "{autodesktop}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: 
 
 [Run]
-Filename: "{app}\\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Tasks: startafterinstall
+Filename: "{app}\\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Tasks: startafterinstall; Parameters: "--force-show"
 
 [UninstallDelete]
 ; Clean up per-user settings on uninstall (optional)
 Type: filesandordirs; Name: "{userappdata}\\Redbright"
+
+[Code]
+function PreviousInstallExists: Boolean;
+var
+  keyName: string;
+begin
+  keyName := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
+             ExpandConstant('{#SetupSetting("AppId")}') + '_is1';
+  Result :=
+    RegKeyExists(HKLM, keyName) or
+    RegKeyExists(HKCU, keyName)
+{$IFDEF WIN64}
+    or RegKeyExists(HKLM64, keyName) or
+    RegKeyExists(HKCU64, keyName)
+{$ENDIF}
+    ;
+end;
+
+procedure InitializeWizard;
+begin
+  if PreviousInstallExists then
+  begin
+    MsgBox('An existing installation of ' + ExpandConstant('{#MyAppName}') + ' was detected.'#13#10#13#10 +
+           'If you continue, it will be overwritten. Your settings will be preserved.',
+           mbInformation, MB_OK);
+  end;
+end;
 
