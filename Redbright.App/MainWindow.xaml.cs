@@ -57,6 +57,11 @@ namespace Redbright.App;
 		private const uint MOD_SHIFT = 0x0004;
 		private const uint MOD_WIN = 0x0008;
 		private const uint MOD_NOREPEAT = 0x4000;
+		private const uint WM_DISPLAYCHANGE = 0x007E;
+		private const uint WM_SETTINGCHANGE = 0x001A;
+		private const uint WM_DWMCOMPOSITIONCHANGED = 0x031E;
+		private const uint WM_SYSCOLORCHANGE = 0x0015;
+		private const uint WM_THEMECHANGED = 0x031A;
 
 		public MainWindow(AppSettings settings)
     {
@@ -64,6 +69,9 @@ namespace Redbright.App;
         _gammaService = new GammaRampService();
 		_magnificationService = new MagnificationService();
         InitializeComponent();
+			#if DEBUG
+			this.Title = "Redbright (Dev)";
+			#endif
         InitializeTrayIcon();
 			// Initialize UI from settings
 			BrightnessSlider.Value = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
@@ -275,6 +283,33 @@ namespace Redbright.App;
                     break;
             }
         }
+		else if (msg == WM_DISPLAYCHANGE || msg == WM_SETTINGCHANGE || msg == WM_DWMCOMPOSITIONCHANGED || msg == WM_SYSCOLORCHANGE || msg == WM_THEMECHANGED)
+		{
+			// Reapply current color/gamma/magnification effects after Windows composition/setting changes
+			try
+			{
+				if (AppLogger.IsEnabled) AppLogger.Log($"[event] Reapply due to msg=0x{msg:X}");
+				var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+				if (_settings.RedOnlyActive)
+				{
+					if (_settings.RemapColorsToRed)
+					{
+						ApplyCompatEnable(effective);
+					}
+					else
+					{
+						_magnificationService.Disable();
+						_gammaService.ApplyRedOnlyBrightness(effective);
+					}
+				}
+				else
+				{
+					_magnificationService.Disable();
+					_gammaService.ApplyBrightnessOnly(effective);
+				}
+			}
+			catch { /* ignore reapply errors */ }
+		}
         return IntPtr.Zero;
     }
 

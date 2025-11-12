@@ -2,7 +2,7 @@
 ; Requires Inno Setup 6.x (iscc.exe)
 
 #define MyAppName "Redbright"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "Redbright"
 #define MyAppExeName "Redbright.App.exe"
 

@@ -32,10 +32,7 @@ public static class AppLogger
 
 	public static string GetLogsDirectory()
 	{
-		var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-		var dir = Path.Combine(root, "Redbright", "logs");
-		Directory.CreateDirectory(dir);
-		return dir;
+		return AppPaths.GetLogsDirectory();
 	}
 
 	public static string GetCurrentAppLogPath()
