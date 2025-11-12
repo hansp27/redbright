@@ -2,7 +2,7 @@
 ; Requires Inno Setup 6.x (iscc.exe)
 
 #define MyAppName "Redbright"
-#define MyAppVersion "1.2.2"
+#define MyAppVersion "1.2.3"
 #define MyAppPublisher "Redbright"
 #define MyAppExeName "Redbright.App.exe"
 
@@ -43,19 +43,14 @@ UninstallDisplayIcon={app}\\{#MyAppExeName}
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Tasks]
-; Optionally start after install
-Name: "startafterinstall"; Description: "Launch {#MyAppName} after setup"; Flags: unchecked
-
 [Files]
 Source: "{#PublishDir}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: 
-
 [Run]
-Filename: "{app}\\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Tasks: startafterinstall; Parameters: "--force-show"
+Filename: "{app}\\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Parameters: "--force-show"
 
 [UninstallDelete]
 ; Clean up per-user settings on uninstall (optional)
