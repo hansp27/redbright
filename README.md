@@ -62,7 +62,7 @@ Notes:
 ## Crash logs
 
 - Global crash handling writes logs to:
-  `%LocalAppData%\Redbright\logs\crash-YYYYMMDD-HHMMSS.txt`
+  `%LocalAppData%\Redbright\logs\crash-YYYYMMDD-HHMMSS.txt` (Release) or `%LocalAppData%\Redbright-Dev\logs\crash-YYYYMMDD-HHMMSS.txt` (Debug/dev builds)
 
 ## Issues & Features 
 

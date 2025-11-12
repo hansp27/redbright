@@ -34,13 +34,7 @@ public static class SettingsStorage
 		WriteIndented = true
 	};
 
-		private static string GetSettingsPath()
-	{
-		var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-		var dir = Path.Combine(root, "Redbright");
-		Directory.CreateDirectory(dir);
-		return Path.Combine(dir, "settings.json");
-	}
+		private static string GetSettingsPath() => AppPaths.GetSettingsPath();
 
 	public static AppSettings Load()
 	{

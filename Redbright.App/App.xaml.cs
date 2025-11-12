@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using System.Windows.Interop;
 
 namespace Redbright.App;
 
@@ -13,9 +14,7 @@ public partial class App : System.Windows.Application
 {
     private static string GetLogsDirectory()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Redbright", "logs");
-        Directory.CreateDirectory(dir);
-        return dir;
+        return AppPaths.GetLogsDirectory();
     }
 
     private static string WriteCrashLog(string source, Exception ex)
@@ -80,13 +79,19 @@ public partial class App : System.Windows.Application
 				AppLogger.Log("[lifecycle] App.OnStartup");
 				AppLogger.LogConfigSnapshot("Working configuration (post-load, in-memory)", settings);
 			}
-            var main = new MainWindow(settings);
-            MainWindow = main;
-            main.Show();
-            if (settings.StartMinimizedToTray)
-            {
-                main.MinimizeToTrayInitially();
-            }
+			var main = new MainWindow(settings);
+			MainWindow = main;
+			if (settings.StartMinimizedToTray)
+			{
+				// Create HWND (fires SourceInitialized → hotkeys register) without showing the window.
+				_ = new WindowInteropHelper(main).EnsureHandle();
+				// Keep it in the tray without ever flashing a window.
+				main.MinimizeToTrayInitially();
+			}
+			else
+			{
+				main.Show();
+			}
         }
         catch (Exception ex)
         {
