@@ -41,6 +41,8 @@ namespace Redbright.App;
     private Forms.ToolStripMenuItem? _exitMenuItem;
     private bool _allowClose;
     private IntPtr _notifyIconHandle;
+		private System.Windows.Threading.DispatcherTimer? _gammaProbeTimer;
+		private bool? _lastGammaOk;
 
 		[DllImport("user32.dll")]
 		private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -106,6 +108,7 @@ namespace Redbright.App;
 			}
 			_initialized = true;
         UpdateMenuTexts();
+			StartGammaProbeTimer();
     }
 
     private void ReconcileColorState()
@@ -289,28 +292,38 @@ namespace Redbright.App;
 			try
 			{
 				if (AppLogger.IsEnabled) AppLogger.Log($"[event] Reapply due to msg=0x{msg:X}");
-				var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-				if (_settings.RedOnlyActive)
-				{
-					if (_settings.RemapColorsToRed)
-					{
-						ApplyCompatEnable(effective);
-					}
-					else
-					{
-						_magnificationService.Disable();
-						_gammaService.ApplyRedOnlyBrightness(effective);
-					}
-				}
-				else
-				{
-					_magnificationService.Disable();
-					_gammaService.ApplyBrightnessOnly(effective);
-				}
+				ReapplyCurrentSettings();
+				ProbeGammaOnce("reapply");
 			}
 			catch { /* ignore reapply errors */ }
 		}
         return IntPtr.Zero;
+    }
+
+    private void ReapplyCurrentSettings()
+    {
+        try
+        {
+            var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+            if (_settings.RedOnlyActive)
+            {
+                if (_settings.RemapColorsToRed)
+                {
+                    ApplyCompatEnable(effective);
+                }
+                else
+                {
+                    _magnificationService.Disable();
+                    _gammaService.ApplyRedOnlyBrightness(effective);
+                }
+            }
+            else
+            {
+                _magnificationService.Disable();
+                _gammaService.ApplyBrightnessOnly(effective);
+            }
+        }
+        catch { }
     }
 
     private void ToggleTrayVisibility()
@@ -974,6 +987,7 @@ namespace Redbright.App;
     {
         try
         {
+			try { if (_gammaProbeTimer != null) { _gammaProbeTimer.Stop(); _gammaProbeTimer = null; } } catch { }
 			// Disable magnification first when grayscale path was used
 			if (_magnificationService != null && (_magnificationService.IsActive || _settings.RemapColorsToRed))
 			{
@@ -1045,5 +1059,51 @@ namespace Redbright.App;
 		_settings.CloseMinimizesToTray = CloseMinimizeCheckBox.IsChecked == true;
 		AppLogger.LogChange("CloseMinimizesToTray", old, _settings.CloseMinimizesToTray);
 		SettingsStorage.Save(_settings);
+	}
+
+	private void StartGammaProbeTimer()
+	{
+		try
+		{
+			_gammaProbeTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+			{
+				Interval = TimeSpan.FromSeconds(1)
+			};
+			_gammaProbeTimer.Tick += (s, e) => ProbeGammaOnce("timer");
+			_gammaProbeTimer.Start();
+		}
+		catch { /* ignore timer failures */ }
+	}
+
+	private void ProbeGammaOnce(string origin)
+	{
+		try
+		{
+			var (ok, diffs, hint) = _gammaService.VerifyAppliedRamp();
+			// Log on state change OR if explicitly requested (e.g. after reapply event)
+			if (_lastGammaOk == null || _lastGammaOk.Value != ok || origin == "reapply")
+			{
+				_lastGammaOk = ok;
+				if (AppLogger.IsEnabled)
+				{
+					var mode = _gammaService.IsRedOnlyActive ? "red_only" : "brightness_only";
+					var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+					AppLogger.LogResult("gamma.verify", ok, $"origin={origin}, mode={mode}, effective={effective}, diffs={diffs}, hint={hint}");
+				}
+			}
+
+			// Auto-fix if timer detected a mismatch
+			if (!ok && origin == "timer")
+			{
+				if (AppLogger.IsEnabled) AppLogger.Log("[warn] Gamma mismatch detected by timer; attempting auto-fix.");
+				ReapplyCurrentSettings();
+				// We do not force a re-verify here; the next timer tick will confirm success (or the user will see it)
+				// Alternatively, we could verify immediately to log the fix success, but let's keep it simple.
+			}
+		}
+		catch
+		{
+			// ignore probe errors
+		}
 	}
 }

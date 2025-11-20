@@ -179,6 +179,101 @@ public sealed class GammaRampService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Attempts to read the current device gamma ramp.
+    /// </summary>
+    public bool TryGetCurrentRamp(out Ramp current)
+    {
+        lock (_sync)
+        {
+            Initialize();
+            current = CreateEmptyRamp();
+            if (_desktopHdc == IntPtr.Zero) return false;
+            return GetDeviceGammaRamp(_desktopHdc, ref current);
+        }
+    }
+
+    private Ramp BuildExpectedRampForCurrent()
+    {
+        var ramp = CreateEmptyRamp();
+        double scale = Math.Clamp(_currentBrightnessPercent, 0.0, 100.0) / 100.0;
+        if (_isRedOnlyActive)
+        {
+            for (int i = 0; i < 256; i++)
+            {
+                uint baseValue = (uint)((i * 65535) / 255);
+                uint redValue = (uint)Math.Round(baseValue * scale);
+                if (redValue > 65535) redValue = 65535;
+                ramp.Red[i] = (ushort)redValue;
+                ramp.Green[i] = 0;
+                ramp.Blue[i] = 0;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 256; i++)
+            {
+                uint baseValue = (uint)((i * 65535) / 255);
+                uint value = (uint)Math.Round(baseValue * scale);
+                if (value > 65535) value = 65535;
+                ushort v = (ushort)value;
+                ramp.Red[i] = v;
+                ramp.Green[i] = v;
+                ramp.Blue[i] = v;
+            }
+        }
+        return ramp;
+    }
+
+    /// <summary>
+    /// Verifies whether the current device gamma ramp approximately matches the expected ramp
+    /// for the current mode and brightness. Returns a tuple indicating match state, number of
+    /// differing entries, and a brief hint for logging.
+    /// </summary>
+    public (bool isMatch, int diffCount, string hint) VerifyAppliedRamp()
+    {
+        lock (_sync)
+        {
+            Initialize();
+            if (_desktopHdc == IntPtr.Zero)
+            {
+                return (false, 0, "no_hdc");
+            }
+            var expected = BuildExpectedRampForCurrent();
+            var current = CreateEmptyRamp();
+            if (!GetDeviceGammaRamp(_desktopHdc, ref current))
+            {
+                return (false, 0, "get_gamma_failed");
+            }
+
+            int diffs = 0;
+            const int tolerance = 1; // allow +/-1 for rounding
+            for (int i = 0; i < 256; i++)
+            {
+                if (Math.Abs(current.Red[i] - expected.Red[i]) > tolerance) diffs++;
+                if (Math.Abs(current.Green[i] - expected.Green[i]) > tolerance) diffs++;
+                if (Math.Abs(current.Blue[i] - expected.Blue[i]) > tolerance) diffs++;
+            }
+
+            bool isIdentityLike = IsIdentityLike(current);
+            string hint = isIdentityLike ? "identity_like" : (diffs == 0 ? "exact" : "mismatch");
+            return (diffs == 0, diffs, hint);
+        }
+    }
+
+    private static bool IsIdentityLike(Ramp ramp)
+    {
+        // Quick heuristic: channels equal and approximately linear at a few sample points
+        int[] sampleIdx = new[] { 0, 1, 64, 128, 192, 254, 255 };
+        foreach (var i in sampleIdx)
+        {
+            if (ramp.Red[i] != ramp.Green[i] || ramp.Red[i] != ramp.Blue[i]) return false;
+            ushort expected = (ushort)((i * 65535) / 255);
+            if (Math.Abs(ramp.Red[i] - expected) > 2) return false;
+        }
+        return true;
+    }
+
     private static Ramp BuildLinearIdentityRamp()
     {
         var ramp = CreateEmptyRamp();
