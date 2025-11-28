@@ -7,7 +7,9 @@
 
 ; Read version from the compiled assembly instead of hardcoding
 #define PublishDir "..\\Redbright.App\\bin\\Release\\net8.0-windows\\win-x64\\publish"
+#ifndef MyAppVersion
 #define MyAppVersion GetStringFileInfo(PublishDir + "\\" + MyAppExeName, "ProductVersion")
+#endif
 
 ; Architecture tag (can be overridden via iscc.exe /DMyArch=...)
 #ifndef MyArch

@@ -41,21 +41,38 @@ if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Compiling Inno Setup installer..." -ForegroundColor Cyan
+
+# Get version from published app to clean it (remove long commit hash) and pass to Inno Setup
+$publishExe = Join-Path $publishDir "Redbright.App.exe"
+$appVersion = "0.0.0"
+if (Test-Path $publishExe) {
+    $rawVersion = (Get-Item $publishExe).VersionInfo.ProductVersion
+    # Remove trailing full commit hash (dot followed by 40 hex chars) if present
+    $cleanVersion = $rawVersion -replace '\.[a-fA-F0-9]{40}$',''
+    Write-Host "Detected version: $rawVersion" -ForegroundColor DarkGray
+    Write-Host "Cleaned version for installer: $cleanVersion" -ForegroundColor Cyan
+    $appVersion = $cleanVersion
+}
+
 # Derive architecture tag from RID (e.g., win-x64 -> x64)
 $arch = "x64"
 if ($Rid -match 'win-(.+)$') { $arch = $Matches[1] }
-& iscc.exe $issPath /DMyArch=$arch
+
+$isccArgs = @($issPath, "/DMyArch=$arch")
+if ($appVersion -ne "0.0.0") {
+    $isccArgs += "/DMyAppVersion=$appVersion"
+}
+& iscc.exe @isccArgs
 Write-Host "Installer build finished." -ForegroundColor Green
 
 
 # Generate SHA-256 checksum for the installer using certutil
 $issDir = Split-Path -Path $issPath -Parent
 $outputDir = Join-Path -Path $issDir -ChildPath "Output"
-# Determine app name and version from the Inno Setup script
+# Determine app name from the Inno Setup script
 $nameMatch = Select-String -Path $issPath -Pattern '^\s*#define\s+MyAppName\s+"([^"]+)"'
-$versionMatch = Select-String -Path $issPath -Pattern '^\s*#define\s+MyAppVersion\s+"([^"]+)"'
 $appName = if ($nameMatch) { $nameMatch.Matches[0].Groups[1].Value } else { "Redbright" }
-$appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
+# $appVersion is determined above
 $installerFileName = "$appName-$appVersion-$arch-Setup.exe"
 $installerPath = Join-Path -Path $outputDir -ChildPath $installerFileName
 # Fallback to legacy filename if needed
