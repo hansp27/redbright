@@ -136,11 +136,50 @@ public sealed class MagnificationService : IDisposable
 		};
 	}
 
+	private static MagColorEffect BuildRedLuminanceMatrix(float rWeight, float gWeight, float bWeight, float gain)
+	{
+		var r = rWeight * gain;
+		var g = gWeight * gain;
+		var b = bWeight * gain;
+		
+		// Matrix is Row-Major (Rows are inputs, Cols are outputs)
+		// We want RGB inputs to contribute to Red Output (Col 0) based on luminance weights.
+		// We want Green/Blue outputs to be 0.
+		
+		return new MagColorEffect
+		{
+			Transform = new float[]
+			{
+				// Row 0 (Red Input) -> contributes 'r' to Red Output (Col 0)
+				r, 0, 0, 0, 0, 
+				// Row 1 (Green Input) -> contributes 'g' to Red Output (Col 0)
+				g, 0, 0, 0, 0, 
+				// Row 2 (Blue Input) -> contributes 'b' to Red Output (Col 0)
+				b, 0, 0, 0, 0, 
+				// Row 3 (Alpha)
+				0, 0, 0, 1, 0,
+				// Row 4 (Translation)
+				0, 0, 0, 0, 1
+			}
+		};
+	}
+
 	public bool EnableRedLuminance()
 	{
 		EnsureInitialized();
 		if (!_initialized) return false;
-		var effect = BuildRedLuminanceMatrix(0.2126f, 0.7152f, 0.0722f);
+		var effect = BuildRedLuminanceMatrix(0.2126f, 0.7152f, 0.0722f, 1.0f);
+		var ok = MagSetFullscreenColorEffect(ref effect);
+		_active = ok && _initialized;
+		return _active;
+	}
+
+	public bool EnableRedLuminance(float gain)
+	{
+		EnsureInitialized();
+		if (!_initialized) return false;
+		if (gain < 0) gain = 0;
+		var effect = BuildRedLuminanceMatrix(0.2126f, 0.7152f, 0.0722f, gain);
 		var ok = MagSetFullscreenColorEffect(ref effect);
 		_active = ok && _initialized;
 		return _active;
@@ -193,11 +232,25 @@ public sealed class MagnificationService : IDisposable
 	/// Apply identity transform. When keepActive is true, we leave the magnifier considered active
 	/// to avoid teardown/reinit artifacts between transitions.
 	/// </summary>
-	public bool SetIdentity(bool keepActive = true)
+	public bool SetIdentity(bool keepActive = true, float gain = 1.0f)
 	{
 		EnsureInitialized();
 		if (!_initialized) return false;
-		var identity = BuildIdentity();
+		
+		// Standard identity matrix
+		// Scale everything by gain to achieve "blacker" colors
+		var identity = new MagColorEffect
+		{
+			Transform = new float[]
+			{
+				gain, 0, 0, 0, 0,
+				0, gain, 0, 0, 0,
+				0, 0, gain, 0, 0,
+				0, 0, 0, 1, 0,
+				0, 0, 0, 0, 1
+			}
+		};
+		
 		var ok = MagSetFullscreenColorEffect(ref identity);
 		_active = keepActive && ok && _initialized;
 		return ok;

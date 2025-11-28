@@ -18,21 +18,20 @@ namespace Redbright.App;
 /// <summary>
 /// Interaction logic for MainWindow.xaml
 /// </summary>
-	public partial class MainWindow : Window
+public partial class MainWindow : Window
 {
-		private readonly GammaRampService _gammaService;
-		private readonly MagnificationService _magnificationService;
-		private readonly AppSettings _settings;
-		private bool _initialized;
-		private bool _capturingHotkey;
-		private bool _updatingPauseUi;
-		private bool _updatingAutoStartUi;
-		private enum HotkeySlot { Both, Brightness, Color }
-		private HotkeySlot _captureSlot = HotkeySlot.Both;
-		private bool _colorOnlyActive;
-		private const int HOTKEY_ID_BOTH = 1;
-		private const int HOTKEY_ID_BRIGHT = 2;
-		private const int HOTKEY_ID_COLOR = 3;
+    private readonly MagnificationService _magnificationService;
+    private readonly AppSettings _settings;
+    private bool _initialized;
+    private bool _capturingHotkey;
+    private bool _updatingPauseUi;
+    private bool _updatingAutoStartUi;
+    private enum HotkeySlot { Both, Brightness, Color }
+    private HotkeySlot _captureSlot = HotkeySlot.Both;
+    private bool _colorOnlyActive;
+    private const int HOTKEY_ID_BOTH = 1;
+    private const int HOTKEY_ID_BRIGHT = 2;
+    private const int HOTKEY_ID_COLOR = 3;
     private Forms.NotifyIcon? _notifyIcon;
     private Forms.ContextMenuStrip? _contextMenu;
     private Forms.ToolStripMenuItem? _toggleMenuItem;
@@ -42,145 +41,134 @@ namespace Redbright.App;
     private Forms.ToolStripMenuItem? _exitMenuItem;
     private bool _allowClose;
     private IntPtr _notifyIconHandle;
-		private System.Windows.Threading.DispatcherTimer? _gammaProbeTimer;
-		private bool? _lastGammaOk;
 
-		[DllImport("user32.dll")]
-		private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    [DllImport("user32.dll")]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
-		[DllImport("user32.dll")]
-		private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    [DllImport("user32.dll")]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     extern static bool DestroyIcon(IntPtr handle);
 
-		private const uint WM_HOTKEY = 0x0312;
-		private const uint MOD_ALT = 0x0001;
-		private const uint MOD_CONTROL = 0x0002;
-		private const uint MOD_SHIFT = 0x0004;
-		private const uint MOD_WIN = 0x0008;
-		private const uint MOD_NOREPEAT = 0x4000;
-		private const uint WM_DISPLAYCHANGE = 0x007E;
-		private const uint WM_SETTINGCHANGE = 0x001A;
-		private const uint WM_DWMCOMPOSITIONCHANGED = 0x031E;
-		private const uint WM_SYSCOLORCHANGE = 0x0015;
-		private const uint WM_THEMECHANGED = 0x031A;
+    private const uint WM_HOTKEY = 0x0312;
+    private const uint MOD_ALT = 0x0001;
+    private const uint MOD_CONTROL = 0x0002;
+    private const uint MOD_SHIFT = 0x0004;
+    private const uint MOD_WIN = 0x0008;
+    private const uint MOD_NOREPEAT = 0x4000;
+    private const uint WM_DISPLAYCHANGE = 0x007E;
+    private const uint WM_SETTINGCHANGE = 0x001A;
+    private const uint WM_DWMCOMPOSITIONCHANGED = 0x031E;
+    private const uint WM_SYSCOLORCHANGE = 0x0015;
+    private const uint WM_THEMECHANGED = 0x031A;
 
-	private bool _hotkeysRegistered = false;
+    private bool _hotkeysRegistered = false;
 
-	public MainWindow(AppSettings settings)
+    public MainWindow(AppSettings settings)
     {
-		_settings = settings;
-        _gammaService = new GammaRampService();
-	_magnificationService = new MagnificationService();
+        _settings = settings;
+        _magnificationService = new MagnificationService();
         InitializeComponent();
-		#if DEBUG
-		this.Title = "Redbright (Dev)";
-		#endif
-		// Set version text with git commit hash and dirty state
-		try
-		{
-			var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-			var infoVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-			
-			if (!string.IsNullOrEmpty(infoVersion))
-			{
-				// InformationalVersion formats:
-				// - Clean: "1.2.5+abc1234"
-				// - Dirty: "1.2.5+abc1234.dirty-20251128-143022"
-				var parts = infoVersion.Split('+');
-				if (parts.Length > 1)
-				{
-					var metadata = parts[1];
-					var isDirty = metadata.Contains(".dirty-");
-					
-					// Extract just the commit hash (before .dirty if present)
-					var commitHash = isDirty ? metadata.Split('.')[0] : metadata;
-					var shortHash = commitHash.Length > 7 ? commitHash.Substring(0, 7) : commitHash;
-					
-					if (isDirty)
-					{
-						// Extract timestamp (format: yyyyMMdd-HHmmss)
-						var timestampMatch = System.Text.RegularExpressions.Regex.Match(metadata, @"\.dirty-(\d{8})-(\d{6})");
-						if (timestampMatch.Success)
-						{
-							var date = timestampMatch.Groups[1].Value;
-							var time = timestampMatch.Groups[2].Value;
-							var timestamp = $"{date.Substring(0, 4)}-{date.Substring(4, 2)}-{date.Substring(6, 2)} {time.Substring(0, 2)}:{time.Substring(2, 2)}";
-							VersionTextBlock.Text = $"v{parts[0]} ({shortHash}*) {timestamp}";
-						}
-						else
-						{
-							VersionTextBlock.Text = $"v{parts[0]} ({shortHash}*)";
-						}
-					}
-					else
-					{
-						VersionTextBlock.Text = $"v{parts[0]} ({shortHash})";
-					}
-				}
-				else
-				{
-					// No commit hash, just show version
-					VersionTextBlock.Text = $"v{infoVersion}";
-				}
-			}
-			else
-			{
-				// Fallback to assembly version
-				var version = assembly.GetName().Version;
-				if (version != null)
-				{
-					VersionTextBlock.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
-				}
-			}
-		}
-		catch { /* ignore version display errors */ }
+#if DEBUG
+        this.Title = "Redbright (Dev)";
+#endif
+        try
+        {
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            var infoVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+            if (!string.IsNullOrEmpty(infoVersion))
+            {
+                var parts = infoVersion.Split('+');
+                if (parts.Length > 1)
+                {
+                    var metadata = parts[1];
+                    var isDirty = metadata.Contains(".dirty-");
+                    var commitHash = isDirty ? metadata.Split('.')[0] : metadata;
+                    var shortHash = commitHash.Length > 7 ? commitHash.Substring(0, 7) : commitHash;
+
+                    if (isDirty)
+                    {
+                        var timestampMatch = System.Text.RegularExpressions.Regex.Match(metadata, @"\.dirty-(\d{8})-(\d{6})");
+                        if (timestampMatch.Success)
+                        {
+                            var date = timestampMatch.Groups[1].Value;
+                            var time = timestampMatch.Groups[2].Value;
+                            var timestamp = $"{date.Substring(0, 4)}-{date.Substring(4, 2)}-{date.Substring(6, 2)} {time.Substring(0, 2)}:{time.Substring(2, 2)}";
+                            VersionTextBlock.Text = $"v{parts[0]} ({shortHash}*) {timestamp}";
+                        }
+                        else
+                        {
+                            VersionTextBlock.Text = $"v{parts[0]} ({shortHash}*)";
+                        }
+                    }
+                    else
+                    {
+                        VersionTextBlock.Text = $"v{parts[0]} ({shortHash})";
+                    }
+                }
+                else
+                {
+                    VersionTextBlock.Text = $"v{infoVersion}";
+                }
+            }
+            else
+            {
+                var version = assembly.GetName().Version;
+                if (version != null)
+                {
+                    VersionTextBlock.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+                }
+            }
+        }
+        catch { /* ignore version display errors */ }
         InitializeTrayIcon();
-			// Initialize UI from settings
-			BrightnessSlider.Value = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-			BrightnessSlider.IsEnabled = !_settings.PauseBrightness;
-			PauseBrightnessCheckBox.IsChecked = _settings.PauseBrightness;
-			RemapToRedCheckBox.IsChecked = _settings.RemapColorsToRed;
-			// Removed dev controls (row/column/strategy/gain)
-			StartMinimizedCheckBox.IsChecked = _settings.StartMinimizedToTray;
-			CloseMinimizeCheckBox.IsChecked = _settings.CloseMinimizesToTray;
-			_updatingAutoStartUi = true;
-			AutoStartCheckBox.IsChecked = IsAutoStartEnabled();
-			_updatingAutoStartUi = false;
-			LoggingEnabledCheckBox.IsChecked = _settings.LoggingEnabled;
-			UpdateLogLinkText();
-			UpdateHotkeyText();
-			_colorOnlyActive = _settings.RedOnlyActive;
-			var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-			if (_settings.RedOnlyActive)
-			{
-				if (_settings.RemapColorsToRed)
-				{
-					ApplyCompatEnable(effective);
-				}
-				else
-				{
-					_gammaService.ApplyRedOnlyBrightness(effective);
-				}
-			}
-			else
-			{
-				_gammaService.ApplyBrightnessOnly(effective);
-			}
-			_initialized = true;
+        
+        BrightnessSlider.Value = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+        BrightnessSlider.IsEnabled = !_settings.PauseBrightness;
+        PauseBrightnessCheckBox.IsChecked = _settings.PauseBrightness;
+        StartMinimizedCheckBox.IsChecked = _settings.StartMinimizedToTray;
+        CloseMinimizeCheckBox.IsChecked = _settings.CloseMinimizesToTray;
+        _updatingAutoStartUi = true;
+        AutoStartCheckBox.IsChecked = IsAutoStartEnabled();
+        _updatingAutoStartUi = false;
+        LoggingEnabledCheckBox.IsChecked = _settings.LoggingEnabled;
+        UpdateLogLinkText();
+        UpdateHotkeyText();
+        _colorOnlyActive = _settings.RedOnlyActive;
+        var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+
+        ApplySettings(effective);
+
+        _initialized = true;
         UpdateMenuTexts();
-			StartGammaProbeTimer();
     }
 
-    private void ReconcileColorState()
+    private void ApplySettings(double brightnessPercent)
     {
-        if (_settings.RedOnlyActive != _gammaService.IsRedOnlyActive)
+        // Convert brightness percent to gain (0.0 - 1.0)
+        float gain = (float)(Math.Clamp(brightnessPercent, 0.0, 100.0) / 100.0);
+
+        if (_colorOnlyActive)
         {
-            _settings.RedOnlyActive = _gammaService.IsRedOnlyActive;
-            SettingsStorage.Save(_settings);
+            // Red mode + brightness
+            _magnificationService.EnableRedLuminance(gain);
+        }
+        else
+        {
+            // Normal mode (brightness only)
+            if (brightnessPercent >= 99.9)
+            {
+                _magnificationService.Disable();
+            }
+            else
+            {
+                _magnificationService.SetIdentity(keepActive: true, gain: gain);
+            }
         }
     }
+
     private void ToggleRedButton_Click(object sender, RoutedEventArgs e)
     {
         ToggleColorOnly();
@@ -189,19 +177,12 @@ namespace Redbright.App;
 
     private void BrightnessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_gammaService == null || !_initialized || _settings.PauseBrightness) return;
-		AppLogger.LogChange("BrightnessPercent", e.OldValue, e.NewValue);
-        ReconcileColorState();
-        if (_gammaService.IsRedOnlyActive)
-        {
-            _gammaService.ApplyRedOnlyBrightness(e.NewValue);
-        }
-        else
-        {
-            _gammaService.ApplyBrightnessOnly(e.NewValue);
-        }
-			_settings.BrightnessPercent = e.NewValue;
-			SettingsStorage.Save(_settings);
+        if (!_initialized || _settings.PauseBrightness) return;
+        AppLogger.LogChange("BrightnessPercent", e.OldValue, e.NewValue);
+
+        _settings.BrightnessPercent = e.NewValue;
+        ApplySettings(_settings.BrightnessPercent);
+        SettingsStorage.Save(_settings);
     }
 
     private void InitializeTrayIcon()
@@ -246,8 +227,6 @@ namespace Redbright.App;
                 ToggleTrayVisibility();
             }
         };
-
-        // Default Windows behavior: minimize stays on taskbar; do not auto-hide to tray on minimize.
     }
 
     private Drawing.Icon LoadTrayIcon()
@@ -313,20 +292,17 @@ namespace Redbright.App;
         catch { }
     }
 
-    // Scheduled Task helper methods removed; using HKCU Run only
-
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
         if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] OnSourceInitialized called");
-        
+
         var source = (HwndSource)PresentationSource.FromVisual(this);
         if (source != null)
         {
             if (AppLogger.IsEnabled) AppLogger.Log($"[lifecycle] Window handle obtained: 0x{source.Handle:X}");
             source.AddHook(WndProc);
-            
-            // Register hotkeys now that we have a valid handle
+
             if (!_hotkeysRegistered)
             {
                 RegisterConfiguredHotkeys();
@@ -337,10 +313,7 @@ namespace Redbright.App;
             if (AppLogger.IsEnabled) AppLogger.Log("[warn] OnSourceInitialized: HwndSource is null! Will retry after handle creation.");
         }
     }
-    
-    /// <summary>
-    /// Call this after EnsureHandle() when starting minimized to ensure hotkeys are registered.
-    /// </summary>
+
     public void EnsureHotkeysRegistered()
     {
         if (_hotkeysRegistered)
@@ -348,22 +321,20 @@ namespace Redbright.App;
             if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] EnsureHotkeysRegistered: Already registered, skipping.");
             return;
         }
-        
+
         if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] EnsureHotkeysRegistered: Attempting to register hotkeys...");
-        
-        // Get the window handle directly using WindowInteropHelper
+
         var helper = new WindowInteropHelper(this);
         var hwnd = helper.Handle;
-        
+
         if (hwnd == IntPtr.Zero)
         {
             if (AppLogger.IsEnabled) AppLogger.Log("[error] EnsureHotkeysRegistered: Window handle is zero!");
             return;
         }
-        
+
         if (AppLogger.IsEnabled) AppLogger.Log($"[lifecycle] EnsureHotkeysRegistered: Got window handle 0x{hwnd:X}");
-        
-        // Get HwndSource from the handle (works even when visual tree not fully connected)
+
         var source = HwndSource.FromHwnd(hwnd);
         if (source != null)
         {
@@ -398,17 +369,15 @@ namespace Redbright.App;
                     break;
             }
         }
-		else if (msg == WM_DISPLAYCHANGE || msg == WM_SETTINGCHANGE || msg == WM_DWMCOMPOSITIONCHANGED || msg == WM_SYSCOLORCHANGE || msg == WM_THEMECHANGED)
-		{
-			// Reapply current color/gamma/magnification effects after Windows composition/setting changes
-			try
-			{
-				if (AppLogger.IsEnabled) AppLogger.Log($"[event] Reapply due to msg=0x{msg:X}");
-				ReapplyCurrentSettings();
-				ProbeGammaOnce("reapply");
-			}
-			catch { /* ignore reapply errors */ }
-		}
+        else if (msg == WM_DISPLAYCHANGE || msg == WM_SETTINGCHANGE || msg == WM_DWMCOMPOSITIONCHANGED || msg == WM_SYSCOLORCHANGE || msg == WM_THEMECHANGED)
+        {
+            try
+            {
+                if (AppLogger.IsEnabled) AppLogger.Log($"[event] Reapply due to msg=0x{msg:X}");
+                ReapplyCurrentSettings();
+            }
+            catch { /* ignore reapply errors */ }
+        }
         return IntPtr.Zero;
     }
 
@@ -417,23 +386,7 @@ namespace Redbright.App;
         try
         {
             var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-            if (_settings.RedOnlyActive)
-            {
-                if (_settings.RemapColorsToRed)
-                {
-                    ApplyCompatEnable(effective);
-                }
-                else
-                {
-                    _magnificationService.Disable();
-                    _gammaService.ApplyRedOnlyBrightness(effective);
-                }
-            }
-            else
-            {
-                _magnificationService.Disable();
-                _gammaService.ApplyBrightnessOnly(effective);
-            }
+            ApplySettings(effective);
         }
         catch { }
     }
@@ -450,44 +403,28 @@ namespace Redbright.App;
         }
     }
 
-	private void UpdateLogLinkText()
-	{
-		try
-		{
-			var path = AppLogger.GetCurrentAppLogPath();
-			if (OpenLogHyperlink != null)
-			{
-				OpenLogHyperlink.Inlines.Clear();
-				OpenLogHyperlink.Inlines.Add(path);
-			}
-		}
-		catch { }
-	}
-
-	private void ApplyCompatEnable(double effectiveBrightness)
-	{
-		// Fixed compat: Gamma red-only + Grayscale overlay with max gain
-		_gammaService.ApplyRedOnlyBrightness(effectiveBrightness);
-		_ = _magnificationService.EnableGrayscale(1.6f);
-	}
-
-	private void ApplyCompatDisable()
-	{
-		_magnificationService.Disable();
-	}
-
-	// Removed dev/testing handlers (row/column/strategy/gain) for fixed compat approach
-
-    // Removed old ToggleBoth; unified on ToggleBothWithPause
+    private void UpdateLogLinkText()
+    {
+        try
+        {
+            var path = AppLogger.GetCurrentAppLogPath();
+            if (OpenLogHyperlink != null)
+            {
+                OpenLogHyperlink.Inlines.Clear();
+                OpenLogHyperlink.Inlines.Add(path);
+            }
+        }
+        catch { }
+    }
 
     private void ToggleBothWithPause()
     {
         if (!_settings.RedOnlyActive)
         {
-			AppLogger.LogChange("RedOnlyActive", false, true);
+            AppLogger.LogChange("RedOnlyActive", false, true);
             if (!_settings.PauseBrightness)
             {
-				AppLogger.LogChange("PauseBrightness", false, true);
+                AppLogger.LogChange("PauseBrightness", false, true);
                 _settings.SavedBrightnessBeforePause = _settings.BrightnessPercent;
                 _settings.PauseBrightness = true;
                 _updatingPauseUi = true;
@@ -496,143 +433,88 @@ namespace Redbright.App;
                 BrightnessSlider.IsEnabled = false;
             }
             BrightnessSlider.Value = 100.0;
-			if (_settings.RemapColorsToRed)
-			{
-				ApplyCompatEnable(100.0);
-			}
-			else
-			{
-				_gammaService.ApplyRedOnlyBrightness(100.0);
-			}
             _settings.RedOnlyActive = true;
             _colorOnlyActive = true;
+            ApplySettings(100.0);
         }
         else
         {
-            // Avoid flicker by applying brightness-only directly without restoring first
-			AppLogger.LogChange("RedOnlyActive", true, false);
+            AppLogger.LogChange("RedOnlyActive", true, false);
             _settings.RedOnlyActive = false;
             _colorOnlyActive = false;
-			if (_settings.RemapColorsToRed)
-			{
-				ApplyCompatDisable();
-			}
 
             if (_settings.PauseBrightness)
             {
-				AppLogger.LogChange("PauseBrightness", true, false);
+                AppLogger.LogChange("PauseBrightness", true, false);
                 _settings.PauseBrightness = false;
                 _updatingPauseUi = true;
                 PauseBrightnessCheckBox.IsChecked = false;
                 _updatingPauseUi = false;
                 BrightnessSlider.IsEnabled = true;
                 BrightnessSlider.Value = _settings.SavedBrightnessBeforePause;
-                _gammaService.ApplyBrightnessOnly(_settings.SavedBrightnessBeforePause);
+                ApplySettings(_settings.SavedBrightnessBeforePause);
             }
             else
             {
-                _gammaService.ApplyBrightnessOnly(BrightnessSlider.Value);
+                ApplySettings(BrightnessSlider.Value);
             }
         }
         SettingsStorage.Save(_settings);
     }
 
-	private void TogglePauseBrightness()
-	{
-		if (_settings.PauseBrightness)
-		{
-			// Unpause: restore previous brightness, enable slider
-			AppLogger.LogChange("PauseBrightness", true, false);
-			_settings.PauseBrightness = false;
-			_updatingPauseUi = true;
-			PauseBrightnessCheckBox.IsChecked = false;
-			_updatingPauseUi = false;
-			BrightnessSlider.IsEnabled = true;
-			BrightnessSlider.Value = _settings.SavedBrightnessBeforePause;
-			if (_gammaService.IsRedOnlyActive)
-			{
-				_gammaService.ApplyRedOnlyBrightness(_settings.SavedBrightnessBeforePause);
-			}
-			else
-			{
-				_gammaService.ApplyBrightnessOnly(_settings.SavedBrightnessBeforePause);
-			}
-		}
-		else
-		{
-			// Pause: store current brightness, set to 100 and lock slider
-			_settings.SavedBrightnessBeforePause = _settings.BrightnessPercent;
-			AppLogger.LogChange("PauseBrightness", false, true);
-			_settings.PauseBrightness = true;
-			_updatingPauseUi = true;
-			PauseBrightnessCheckBox.IsChecked = true;
-			_updatingPauseUi = false;
-			BrightnessSlider.IsEnabled = false;
-			BrightnessSlider.Value = 100.0;
-			if (_gammaService.IsRedOnlyActive)
-			{
-				_gammaService.ApplyRedOnlyBrightness(100.0);
-			}
-			else
-			{
-				_gammaService.ApplyBrightnessOnly(100.0);
-			}
-		}
-		SettingsStorage.Save(_settings);
-	}
+    private void TogglePauseBrightness()
+    {
+        if (_settings.PauseBrightness)
+        {
+            AppLogger.LogChange("PauseBrightness", true, false);
+            _settings.PauseBrightness = false;
+            _updatingPauseUi = true;
+            PauseBrightnessCheckBox.IsChecked = false;
+            _updatingPauseUi = false;
+            BrightnessSlider.IsEnabled = true;
+            BrightnessSlider.Value = _settings.SavedBrightnessBeforePause;
 
-	private void ToggleColorOnly()
-	{
-		if (_colorOnlyActive)
-		{
-			// Avoid flicker by applying brightness-only directly without restoring first
-			_colorOnlyActive = false;
-			// Re-apply brightness-only with current effective brightness
-			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-			// Step 1 (reverse of enable step 2): remove grayscale overlay by setting identity (keep active)
-			if (_settings.RemapColorsToRed)
-			{
-				_magnificationService.SetIdentity(keepActive: true);
-			}
-			// Step 2 (reverse of enable step 1): switch gamma back to brightness-only
-			// If grayscale was enabled, delay slightly to let the identity overlay settle
-			if (_settings.RemapColorsToRed)
-			{
-				var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render)
-				{
-					Interval = TimeSpan.FromMilliseconds(24)
-				};
-				timer.Tick += (s, e) =>
-				{
-					timer.Stop();
-					_gammaService.ApplyBrightnessOnly(effectiveBrightness);
-				};
-				timer.Start();
-			}
-			else
-			{
-				_gammaService.ApplyBrightnessOnly(effectiveBrightness);
-			}
-			AppLogger.LogChange("RedOnlyActive", true, false);
-			_settings.RedOnlyActive = false;
-		}
-		else
-		{
-			// Apply red-only honoring current brightness or pause
-			var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-			if (_settings.RemapColorsToRed)
-			{
-				ApplyCompatEnable(effectiveBrightness);
-			}
-			else
-			{
-				_gammaService.ApplyRedOnlyBrightness(effectiveBrightness);
-			}
-			_colorOnlyActive = true;
-			AppLogger.LogChange("RedOnlyActive", false, true);
-			_settings.RedOnlyActive = true;
-		}
-	}
+            ApplySettings(_settings.SavedBrightnessBeforePause);
+        }
+        else
+        {
+            _settings.SavedBrightnessBeforePause = _settings.BrightnessPercent;
+            AppLogger.LogChange("PauseBrightness", false, true);
+            _settings.PauseBrightness = true;
+            _updatingPauseUi = true;
+            PauseBrightnessCheckBox.IsChecked = true;
+            _updatingPauseUi = false;
+            BrightnessSlider.IsEnabled = false;
+            BrightnessSlider.Value = 100.0;
+
+            ApplySettings(100.0);
+        }
+        SettingsStorage.Save(_settings);
+    }
+
+    private void ToggleColorOnly()
+    {
+        if (_colorOnlyActive)
+        {
+            _colorOnlyActive = false;
+            var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+
+            ApplySettings(effectiveBrightness);
+
+            AppLogger.LogChange("RedOnlyActive", true, false);
+            _settings.RedOnlyActive = false;
+        }
+        else
+        {
+            var effectiveBrightness = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
+
+            _colorOnlyActive = true;
+            ApplySettings(effectiveBrightness);
+
+            AppLogger.LogChange("RedOnlyActive", false, true);
+            _settings.RedOnlyActive = true;
+        }
+    }
 
     private void PauseBrightnessCheckBox_Changed(object sender, RoutedEventArgs e)
     {
@@ -643,28 +525,14 @@ namespace Redbright.App;
             _settings.PauseBrightness = true;
             BrightnessSlider.IsEnabled = false;
             BrightnessSlider.Value = 100.0;
-            if (_gammaService.IsRedOnlyActive)
-            {
-                _gammaService.ApplyRedOnlyBrightness(100.0);
-            }
-			else
-			{
-				_gammaService.ApplyBrightnessOnly(100.0);
-			}
+            ApplySettings(100.0);
         }
         else
         {
             _settings.PauseBrightness = false;
             BrightnessSlider.IsEnabled = true;
             BrightnessSlider.Value = _settings.SavedBrightnessBeforePause;
-            if (_gammaService.IsRedOnlyActive)
-            {
-                _gammaService.ApplyRedOnlyBrightness(_settings.SavedBrightnessBeforePause);
-            }
-			else
-			{
-				_gammaService.ApplyBrightnessOnly(_settings.SavedBrightnessBeforePause);
-			}
+            ApplySettings(_settings.SavedBrightnessBeforePause);
         }
         SettingsStorage.Save(_settings);
     }
@@ -699,55 +567,54 @@ namespace Redbright.App;
         UpdateMenuTexts();
     }
 
-	private void LoggingEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
-	{
-		_settings.LoggingEnabled = LoggingEnabledCheckBox.IsChecked == true;
-		AppLogger.SetEnabled(_settings.LoggingEnabled);
-		if (_settings.LoggingEnabled)
-		{
-			AppLogger.EnsureLogFile();
-			AppLogger.LogResult("logging.toggled", true, "enabled=true");
-			// Dump saved vs working snapshot when turning on
-			try
-			{
-				var saved = SettingsStorage.Load();
-				AppLogger.LogSavedAndWorking(saved, _settings);
-			}
-			catch (Exception ex)
-			{
-				if (AppLogger.IsEnabled) AppLogger.LogResult("logging.dump", false, ex.Message);
-			}
-		}
-		else
-		{
-			AppLogger.LogResult("logging.toggled", true, "enabled=false");
-		}
-		SettingsStorage.Save(_settings);
-		UpdateLogLinkText();
-	}
+    private void LoggingEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        _settings.LoggingEnabled = LoggingEnabledCheckBox.IsChecked == true;
+        AppLogger.SetEnabled(_settings.LoggingEnabled);
+        if (_settings.LoggingEnabled)
+        {
+            AppLogger.EnsureLogFile();
+            AppLogger.LogResult("logging.toggled", true, "enabled=true");
+            try
+            {
+                var saved = SettingsStorage.Load();
+                AppLogger.LogSavedAndWorking(saved, _settings);
+            }
+            catch (Exception ex)
+            {
+                if (AppLogger.IsEnabled) AppLogger.LogResult("logging.dump", false, ex.Message);
+            }
+        }
+        else
+        {
+            AppLogger.LogResult("logging.toggled", true, "enabled=false");
+        }
+        SettingsStorage.Save(_settings);
+        UpdateLogLinkText();
+    }
 
-	private void OpenLogHyperlink_Click(object sender, RoutedEventArgs e)
-	{
-		try
-		{
-			AppLogger.EnsureLogFile();
-			var path = AppLogger.GetCurrentAppLogPath();
-			var psi = new ProcessStartInfo
-			{
-				FileName = path,
-				UseShellExecute = true
-			};
-			Process.Start(psi);
-		}
-		catch
-		{
-			try
-			{
-				System.Windows.MessageBox.Show(this, "Could not open the log file.", "Redbright", MessageBoxButton.OK, MessageBoxImage.Warning);
-			}
-			catch { }
-		}
-	}
+    private void OpenLogHyperlink_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            AppLogger.EnsureLogFile();
+            var path = AppLogger.GetCurrentAppLogPath();
+            var psi = new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            };
+            Process.Start(psi);
+        }
+        catch
+        {
+            try
+            {
+                System.Windows.MessageBox.Show(this, "Could not open the log file.", "Redbright", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch { }
+        }
+    }
 
     private void SetHotkey_Click(object sender, RoutedEventArgs e)
     {
@@ -758,12 +625,12 @@ namespace Redbright.App;
 
     private void ClearHotkey_Click(object sender, RoutedEventArgs e)
     {
-		var old = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
+        var old = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
         UnregisterAllHotkeys();
         _hotkeysRegistered = false;
         _settings.HotkeyModifiers = 0;
         _settings.HotkeyVirtualKey = 0;
-		AppLogger.LogChange("HotkeyBoth", old, "None");
+        AppLogger.LogChange("HotkeyBoth", old, "None");
         SettingsStorage.Save(_settings);
         UpdateHotkeyText();
         RegisterConfiguredHotkeys();
@@ -771,12 +638,12 @@ namespace Redbright.App;
 
     private void ClearHotkeyBrightness_Click(object sender, RoutedEventArgs e)
     {
-		var old = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
+        var old = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
         UnregisterAllHotkeys();
         _hotkeysRegistered = false;
         _settings.HotkeyBrightnessModifiers = 0;
         _settings.HotkeyBrightnessVirtualKey = 0;
-		AppLogger.LogChange("HotkeyBrightness", old, "None");
+        AppLogger.LogChange("HotkeyBrightness", old, "None");
         SettingsStorage.Save(_settings);
         UpdateHotkeyText();
         RegisterConfiguredHotkeys();
@@ -784,12 +651,12 @@ namespace Redbright.App;
 
     private void ClearHotkeyColor_Click(object sender, RoutedEventArgs e)
     {
-		var old = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
+        var old = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
         UnregisterAllHotkeys();
         _hotkeysRegistered = false;
         _settings.HotkeyColorModifiers = 0;
         _settings.HotkeyColorVirtualKey = 0;
-		AppLogger.LogChange("HotkeyColor", old, "None");
+        AppLogger.LogChange("HotkeyColor", old, "None");
         SettingsStorage.Save(_settings);
         UpdateHotkeyText();
         RegisterConfiguredHotkeys();
@@ -808,8 +675,6 @@ namespace Redbright.App;
         _capturingHotkey = false;
         UpdateHotkeyText();
     }
-
-
 
     private void HotkeyBrightnessTextBox_GotFocus(object sender, RoutedEventArgs e)
     {
@@ -872,27 +737,27 @@ namespace Redbright.App;
         _hotkeysRegistered = false;
         if (_captureSlot == HotkeySlot.Both)
         {
-			var oldDisp = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
+            var oldDisp = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
             _settings.HotkeyModifiers = (int)mods;
             _settings.HotkeyVirtualKey = vk;
-			var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
-			AppLogger.LogChange("HotkeyBoth", oldDisp, newDisp);
+            var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
+            AppLogger.LogChange("HotkeyBoth", oldDisp, newDisp);
         }
         else if (_captureSlot == HotkeySlot.Brightness)
         {
-			var oldDisp = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
+            var oldDisp = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
             _settings.HotkeyBrightnessModifiers = (int)mods;
             _settings.HotkeyBrightnessVirtualKey = vk;
-			var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
-			AppLogger.LogChange("HotkeyBrightness", oldDisp, newDisp);
+            var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
+            AppLogger.LogChange("HotkeyBrightness", oldDisp, newDisp);
         }
         else if (_captureSlot == HotkeySlot.Color)
         {
-			var oldDisp = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
+            var oldDisp = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
             _settings.HotkeyColorModifiers = (int)mods;
             _settings.HotkeyColorVirtualKey = vk;
-			var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
-			AppLogger.LogChange("HotkeyColor", oldDisp, newDisp);
+            var newDisp = BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
+            AppLogger.LogChange("HotkeyColor", oldDisp, newDisp);
         }
         SettingsStorage.Save(_settings);
         RegisterConfiguredHotkeys();
@@ -955,33 +820,30 @@ namespace Redbright.App;
     private void RegisterConfiguredHotkeys()
     {
         if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] RegisterConfiguredHotkeys called");
-        
-        // Get window handle using WindowInteropHelper (more reliable than PresentationSource when starting minimized)
+
         var helper = new WindowInteropHelper(this);
         var hwnd = helper.Handle;
-        
+
         if (hwnd == IntPtr.Zero)
         {
             if (AppLogger.IsEnabled) AppLogger.Log("[error] RegisterConfiguredHotkeys: Window handle is zero! Cannot register hotkeys.");
             return;
         }
-        
+
         if (AppLogger.IsEnabled)
         {
             AppLogger.Log($"[lifecycle] Window handle available: 0x{hwnd:X}");
-            
-            // Log configured hotkeys
+
             var hotkeysBoth = _settings.HotkeyVirtualKey != 0 ? BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey) : "None";
             var hotkeysBright = _settings.HotkeyBrightnessVirtualKey != 0 ? BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey) : "None";
             var hotkeysColor = _settings.HotkeyColorVirtualKey != 0 ? BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey) : "None";
             AppLogger.Log($"[lifecycle] Configured hotkeys - Both: {hotkeysBoth}, Brightness: {hotkeysBright}, Color: {hotkeysColor}");
         }
-        
-        // Unregister first to avoid duplicates
+
         UnregisterAllHotkeys();
-        
+
         System.Collections.Generic.List<string> failures = new();
-        
+
         if (_settings.HotkeyVirtualKey != 0)
         {
             bool success = RegisterHotKey(hwnd, HOTKEY_ID_BOTH, (uint)_settings.HotkeyModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyVirtualKey);
@@ -1024,11 +886,9 @@ namespace Redbright.App;
                 if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", true, $"HOTKEY_ID_COLOR ({BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey)})");
             }
         }
-        
-        // Mark as registered (even if some failed, we tried)
+
         _hotkeysRegistered = true;
-        
-        // Show notification if any hotkeys failed to register
+
         if (failures.Count > 0)
         {
             var message = "The following keyboard shortcuts could not be registered (likely already in use by another application):\n\n" +
@@ -1040,9 +900,8 @@ namespace Redbright.App;
             }
             catch
             {
-                // If window not ready, try without parent
                 try { System.Windows.MessageBox.Show(message, "Redbright - Hotkey Conflict", MessageBoxButton.OK, MessageBoxImage.Warning); }
-                catch { /* ignore UI errors */ }
+                catch { }
             }
         }
         else if (AppLogger.IsEnabled && (_settings.HotkeyVirtualKey != 0 || _settings.HotkeyBrightnessVirtualKey != 0 || _settings.HotkeyColorVirtualKey != 0))
@@ -1127,19 +986,17 @@ namespace Redbright.App;
         BeginHotkeyCapture(HotkeySlot.Color);
     }
 
-		private void StartMinimizedCheckBox_Changed(object sender, RoutedEventArgs e)
-		{
-		var old = _settings.StartMinimizedToTray;
-			_settings.StartMinimizedToTray = StartMinimizedCheckBox.IsChecked == true;
-		AppLogger.LogChange("StartMinimizedToTray", old, _settings.StartMinimizedToTray);
-			SettingsStorage.Save(_settings);
-		}
+    private void ExitRequested()
+    {
+        _allowClose = true;
+        this.Close();
+    }
 
     private void AutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
     {
         if (_updatingAutoStartUi) return;
         var desired = AutoStartCheckBox.IsChecked == true;
-		var previous = _settings.AutoStart;
+        var previous = _settings.AutoStart;
         bool success = false;
         try
         {
@@ -1151,7 +1008,7 @@ namespace Redbright.App;
         {
             success = false;
         }
-		AppLogger.LogResult("autostart.set", success, $"desired={desired}");
+        AppLogger.LogResult("autostart.set", success, $"desired={desired}");
         if (!success)
         {
             _updatingAutoStartUi = true;
@@ -1167,14 +1024,25 @@ namespace Redbright.App;
             return;
         }
         _settings.AutoStart = desired;
-		AppLogger.LogChange("AutoStart", previous, _settings.AutoStart);
+        AppLogger.LogChange("AutoStart", previous, _settings.AutoStart);
         SettingsStorage.Save(_settings);
     }
 
-    private void ExitRequested()
+    private void StartMinimizedCheckBox_Changed(object sender, RoutedEventArgs e)
     {
-        _allowClose = true;
-        this.Close();
+        var old = _settings.StartMinimizedToTray;
+        _settings.StartMinimizedToTray = StartMinimizedCheckBox.IsChecked == true;
+        AppLogger.LogChange("StartMinimizedToTray", old, _settings.StartMinimizedToTray);
+        SettingsStorage.Save(_settings);
+    }
+
+    private void CloseMinimizeCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        var old = _settings.CloseMinimizesToTray;
+        _settings.CloseMinimizesToTray = CloseMinimizeCheckBox.IsChecked == true;
+        AppLogger.LogChange("CloseMinimizesToTray", old, _settings.CloseMinimizesToTray);
+        SettingsStorage.Save(_settings);
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -1192,28 +1060,16 @@ namespace Redbright.App;
     {
         try
         {
-			try { if (_gammaProbeTimer != null) { _gammaProbeTimer.Stop(); _gammaProbeTimer = null; } } catch { }
-			// Disable magnification first when grayscale path was used
-			if (_magnificationService != null && (_magnificationService.IsActive || _settings.RemapColorsToRed))
-			{
-				_magnificationService.Disable();
-				// Wait ~1 frame before restoring gamma to avoid transient green flash
-				if (_settings.RemapColorsToRed)
-				{
-					System.Threading.Thread.Sleep(24);
-				}
-			}
-			if (_gammaService.IsRedOnlyActive)
-			{
-				_gammaService.RestoreOriginal();
-			}
+            if (_magnificationService != null && _magnificationService.IsActive)
+            {
+                _magnificationService.Disable();
+            }
             UnregisterAllHotkeys();
             SettingsStorage.Save(_settings);
         }
         finally
         {
-            _gammaService.Dispose();
-			_magnificationService.Dispose();
+            _magnificationService.Dispose();
             if (_notifyIcon != null)
             {
                 _notifyIcon.Visible = false;
@@ -1228,87 +1084,4 @@ namespace Redbright.App;
         }
         base.OnClosed(e);
     }
-
-	private void RemapToRedCheckBox_Changed(object sender, RoutedEventArgs e)
-	{
-		if (!_initialized) return;
-		var desired = RemapToRedCheckBox.IsChecked == true;
-		var old = _settings.RemapColorsToRed;
-		_settings.RemapColorsToRed = desired;
-		AppLogger.LogChange("RemapColorsToRed", old, desired);
-
-		// If color-only currently active, switch implementation accordingly
-		var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-		if (_colorOnlyActive)
-		{
-			if (desired)
-			{
-				ApplyCompatEnable(effective);
-			}
-			else
-			{
-				// Remove overlay; continue red-only gamma
-				ApplyCompatDisable();
-				_gammaService.ApplyRedOnlyBrightness(effective);
-			}
-		}
-		SettingsStorage.Save(_settings);
-	}
-
-	// Removed RemapRowComboBox_Changed since dev controls were removed
-
-	private void CloseMinimizeCheckBox_Changed(object sender, RoutedEventArgs e)
-	{
-		if (!_initialized) return;
-		var old = _settings.CloseMinimizesToTray;
-		_settings.CloseMinimizesToTray = CloseMinimizeCheckBox.IsChecked == true;
-		AppLogger.LogChange("CloseMinimizesToTray", old, _settings.CloseMinimizesToTray);
-		SettingsStorage.Save(_settings);
-	}
-
-	private void StartGammaProbeTimer()
-	{
-		try
-		{
-			_gammaProbeTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
-			{
-				Interval = TimeSpan.FromSeconds(1)
-			};
-			_gammaProbeTimer.Tick += (s, e) => ProbeGammaOnce("timer");
-			_gammaProbeTimer.Start();
-		}
-		catch { /* ignore timer failures */ }
-	}
-
-	private void ProbeGammaOnce(string origin)
-	{
-		try
-		{
-			var (ok, diffs, hint) = _gammaService.VerifyAppliedRamp();
-			// Log on state change OR if explicitly requested (e.g. after reapply event)
-			if (_lastGammaOk == null || _lastGammaOk.Value != ok || origin == "reapply")
-			{
-				_lastGammaOk = ok;
-				if (AppLogger.IsEnabled)
-				{
-					var mode = _gammaService.IsRedOnlyActive ? "red_only" : "brightness_only";
-					var effective = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
-					AppLogger.LogResult("gamma.verify", ok, $"origin={origin}, mode={mode}, effective={effective}, diffs={diffs}, hint={hint}");
-				}
-			}
-
-			// Auto-fix if timer detected a mismatch
-			if (!ok && origin == "timer")
-			{
-				if (AppLogger.IsEnabled) AppLogger.Log("[warn] Gamma mismatch detected by timer; attempting auto-fix.");
-				ReapplyCurrentSettings();
-				// We do not force a re-verify here; the next timer tick will confirm success (or the user will see it)
-				// Alternatively, we could verify immediately to log the fix success, but let's keep it simple.
-			}
-		}
-		catch
-		{
-			// ignore probe errors
-		}
-	}
 }
