@@ -66,16 +66,18 @@ namespace Redbright.App;
 		private const uint WM_SYSCOLORCHANGE = 0x0015;
 		private const uint WM_THEMECHANGED = 0x031A;
 
-		public MainWindow(AppSettings settings)
+	private bool _hotkeysRegistered = false;
+
+	public MainWindow(AppSettings settings)
     {
-			_settings = settings;
+		_settings = settings;
         _gammaService = new GammaRampService();
-		_magnificationService = new MagnificationService();
+	_magnificationService = new MagnificationService();
         InitializeComponent();
-			#if DEBUG
-			this.Title = "Redbright (Dev)";
-			#endif
-// Set version text with git commit hash and dirty state
+		#if DEBUG
+		this.Title = "Redbright (Dev)";
+		#endif
+		// Set version text with git commit hash and dirty state
 		try
 		{
 			var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -316,13 +318,63 @@ namespace Redbright.App;
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
+        if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] OnSourceInitialized called");
+        
         var source = (HwndSource)PresentationSource.FromVisual(this);
         if (source != null)
         {
+            if (AppLogger.IsEnabled) AppLogger.Log($"[lifecycle] Window handle obtained: 0x{source.Handle:X}");
             source.AddHook(WndProc);
+            
+            // Register hotkeys now that we have a valid handle
+            if (!_hotkeysRegistered)
+            {
+                RegisterConfiguredHotkeys();
+            }
         }
-		// Register hotkeys only after a handle exists
-		RegisterConfiguredHotkeys();
+        else
+        {
+            if (AppLogger.IsEnabled) AppLogger.Log("[warn] OnSourceInitialized: HwndSource is null! Will retry after handle creation.");
+        }
+    }
+    
+    /// <summary>
+    /// Call this after EnsureHandle() when starting minimized to ensure hotkeys are registered.
+    /// </summary>
+    public void EnsureHotkeysRegistered()
+    {
+        if (_hotkeysRegistered)
+        {
+            if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] EnsureHotkeysRegistered: Already registered, skipping.");
+            return;
+        }
+        
+        if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] EnsureHotkeysRegistered: Attempting to register hotkeys...");
+        
+        // Get the window handle directly using WindowInteropHelper
+        var helper = new WindowInteropHelper(this);
+        var hwnd = helper.Handle;
+        
+        if (hwnd == IntPtr.Zero)
+        {
+            if (AppLogger.IsEnabled) AppLogger.Log("[error] EnsureHotkeysRegistered: Window handle is zero!");
+            return;
+        }
+        
+        if (AppLogger.IsEnabled) AppLogger.Log($"[lifecycle] EnsureHotkeysRegistered: Got window handle 0x{hwnd:X}");
+        
+        // Get HwndSource from the handle (works even when visual tree not fully connected)
+        var source = HwndSource.FromHwnd(hwnd);
+        if (source != null)
+        {
+            if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] EnsureHotkeysRegistered: HwndSource obtained, adding WndProc hook");
+            source.AddHook(WndProc);
+            RegisterConfiguredHotkeys();
+        }
+        else
+        {
+            if (AppLogger.IsEnabled) AppLogger.Log("[error] EnsureHotkeysRegistered: HwndSource.FromHwnd returned null!");
+        }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -708,6 +760,7 @@ namespace Redbright.App;
     {
 		var old = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
         UnregisterAllHotkeys();
+        _hotkeysRegistered = false;
         _settings.HotkeyModifiers = 0;
         _settings.HotkeyVirtualKey = 0;
 		AppLogger.LogChange("HotkeyBoth", old, "None");
@@ -720,6 +773,7 @@ namespace Redbright.App;
     {
 		var old = (_settings.HotkeyBrightnessModifiers == 0 && _settings.HotkeyBrightnessVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
         UnregisterAllHotkeys();
+        _hotkeysRegistered = false;
         _settings.HotkeyBrightnessModifiers = 0;
         _settings.HotkeyBrightnessVirtualKey = 0;
 		AppLogger.LogChange("HotkeyBrightness", old, "None");
@@ -732,6 +786,7 @@ namespace Redbright.App;
     {
 		var old = (_settings.HotkeyColorModifiers == 0 && _settings.HotkeyColorVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
         UnregisterAllHotkeys();
+        _hotkeysRegistered = false;
         _settings.HotkeyColorModifiers = 0;
         _settings.HotkeyColorVirtualKey = 0;
 		AppLogger.LogChange("HotkeyColor", old, "None");
@@ -814,6 +869,7 @@ namespace Redbright.App;
         int vk = KeyInterop.VirtualKeyFromKey(key);
 
         UnregisterAllHotkeys();
+        _hotkeysRegistered = false;
         if (_captureSlot == HotkeySlot.Both)
         {
 			var oldDisp = (_settings.HotkeyModifiers == 0 && _settings.HotkeyVirtualKey == 0) ? "None" : BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
@@ -898,25 +954,111 @@ namespace Redbright.App;
 
     private void RegisterConfiguredHotkeys()
     {
-        var source = (HwndSource)PresentationSource.FromVisual(this);
-        if (source?.Handle == null) return;
+        if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] RegisterConfiguredHotkeys called");
+        
+        // Get window handle using WindowInteropHelper (more reliable than PresentationSource when starting minimized)
+        var helper = new WindowInteropHelper(this);
+        var hwnd = helper.Handle;
+        
+        if (hwnd == IntPtr.Zero)
+        {
+            if (AppLogger.IsEnabled) AppLogger.Log("[error] RegisterConfiguredHotkeys: Window handle is zero! Cannot register hotkeys.");
+            return;
+        }
+        
+        if (AppLogger.IsEnabled)
+        {
+            AppLogger.Log($"[lifecycle] Window handle available: 0x{hwnd:X}");
+            
+            // Log configured hotkeys
+            var hotkeysBoth = _settings.HotkeyVirtualKey != 0 ? BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey) : "None";
+            var hotkeysBright = _settings.HotkeyBrightnessVirtualKey != 0 ? BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey) : "None";
+            var hotkeysColor = _settings.HotkeyColorVirtualKey != 0 ? BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey) : "None";
+            AppLogger.Log($"[lifecycle] Configured hotkeys - Both: {hotkeysBoth}, Brightness: {hotkeysBright}, Color: {hotkeysColor}");
+        }
+        
         // Unregister first to avoid duplicates
         UnregisterAllHotkeys();
+        
+        System.Collections.Generic.List<string> failures = new();
+        
         if (_settings.HotkeyVirtualKey != 0)
-            _ = RegisterHotKey(source.Handle, HOTKEY_ID_BOTH, (uint)_settings.HotkeyModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyVirtualKey);
+        {
+            bool success = RegisterHotKey(hwnd, HOTKEY_ID_BOTH, (uint)_settings.HotkeyModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyVirtualKey);
+            if (!success)
+            {
+                var hotkeyText = BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey);
+                failures.Add($"Toggle Red + Brightness: {hotkeyText}");
+                if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", false, $"HOTKEY_ID_BOTH ({hotkeyText}) - likely already in use by another app");
+            }
+            else
+            {
+                if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", true, $"HOTKEY_ID_BOTH ({BuildHotkeyDisplay((uint)_settings.HotkeyModifiers, (uint)_settings.HotkeyVirtualKey)})");
+            }
+        }
         if (_settings.HotkeyBrightnessVirtualKey != 0)
-            _ = RegisterHotKey(source.Handle, HOTKEY_ID_BRIGHT, (uint)_settings.HotkeyBrightnessModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyBrightnessVirtualKey);
+        {
+            bool success = RegisterHotKey(hwnd, HOTKEY_ID_BRIGHT, (uint)_settings.HotkeyBrightnessModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyBrightnessVirtualKey);
+            if (!success)
+            {
+                var hotkeyText = BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey);
+                failures.Add($"Pause/Unpause Brightness: {hotkeyText}");
+                if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", false, $"HOTKEY_ID_BRIGHT ({hotkeyText}) - likely already in use by another app");
+            }
+            else
+            {
+                if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", true, $"HOTKEY_ID_BRIGHT ({BuildHotkeyDisplay((uint)_settings.HotkeyBrightnessModifiers, (uint)_settings.HotkeyBrightnessVirtualKey)})");
+            }
+        }
         if (_settings.HotkeyColorVirtualKey != 0)
-            _ = RegisterHotKey(source.Handle, HOTKEY_ID_COLOR, (uint)_settings.HotkeyColorModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyColorVirtualKey);
+        {
+            bool success = RegisterHotKey(hwnd, HOTKEY_ID_COLOR, (uint)_settings.HotkeyColorModifiers | MOD_NOREPEAT, (uint)_settings.HotkeyColorVirtualKey);
+            if (!success)
+            {
+                var hotkeyText = BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey);
+                failures.Add($"Toggle Red: {hotkeyText}");
+                if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", false, $"HOTKEY_ID_COLOR ({hotkeyText}) - likely already in use by another app");
+            }
+            else
+            {
+                if (AppLogger.IsEnabled) AppLogger.LogResult("hotkey.register", true, $"HOTKEY_ID_COLOR ({BuildHotkeyDisplay((uint)_settings.HotkeyColorModifiers, (uint)_settings.HotkeyColorVirtualKey)})");
+            }
+        }
+        
+        // Mark as registered (even if some failed, we tried)
+        _hotkeysRegistered = true;
+        
+        // Show notification if any hotkeys failed to register
+        if (failures.Count > 0)
+        {
+            var message = "The following keyboard shortcuts could not be registered (likely already in use by another application):\n\n" +
+                          string.Join("\n", failures) +
+                          "\n\nPlease choose different shortcuts in Redbright settings, or close the conflicting application.";
+            try
+            {
+                System.Windows.MessageBox.Show(this, message, "Redbright - Hotkey Conflict", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch
+            {
+                // If window not ready, try without parent
+                try { System.Windows.MessageBox.Show(message, "Redbright - Hotkey Conflict", MessageBoxButton.OK, MessageBoxImage.Warning); }
+                catch { /* ignore UI errors */ }
+            }
+        }
+        else if (AppLogger.IsEnabled && (_settings.HotkeyVirtualKey != 0 || _settings.HotkeyBrightnessVirtualKey != 0 || _settings.HotkeyColorVirtualKey != 0))
+        {
+            AppLogger.LogResult("hotkey.register", true, "All configured hotkeys registered successfully");
+        }
     }
 
     private void UnregisterAllHotkeys()
     {
-        var source = (HwndSource)PresentationSource.FromVisual(this);
-        if (source?.Handle == null) return;
-        _ = UnregisterHotKey(source.Handle, HOTKEY_ID_BOTH);
-        _ = UnregisterHotKey(source.Handle, HOTKEY_ID_BRIGHT);
-        _ = UnregisterHotKey(source.Handle, HOTKEY_ID_COLOR);
+        var helper = new WindowInteropHelper(this);
+        var hwnd = helper.Handle;
+        if (hwnd == IntPtr.Zero) return;
+        _ = UnregisterHotKey(hwnd, HOTKEY_ID_BOTH);
+        _ = UnregisterHotKey(hwnd, HOTKEY_ID_BRIGHT);
+        _ = UnregisterHotKey(hwnd, HOTKEY_ID_COLOR);
     }
 
     private void BeginHotkeyCapture(HotkeySlot slot)
@@ -946,6 +1088,7 @@ namespace Redbright.App;
         if (_settings.HotkeyVirtualKey != 0)
         {
             UnregisterAllHotkeys();
+            _hotkeysRegistered = false;
             _settings.HotkeyModifiers = 0;
             _settings.HotkeyVirtualKey = 0;
             SettingsStorage.Save(_settings);
@@ -960,6 +1103,7 @@ namespace Redbright.App;
         if (_settings.HotkeyBrightnessVirtualKey != 0)
         {
             UnregisterAllHotkeys();
+            _hotkeysRegistered = false;
             _settings.HotkeyBrightnessModifiers = 0;
             _settings.HotkeyBrightnessVirtualKey = 0;
             SettingsStorage.Save(_settings);
@@ -974,6 +1118,7 @@ namespace Redbright.App;
         if (_settings.HotkeyColorVirtualKey != 0)
         {
             UnregisterAllHotkeys();
+            _hotkeysRegistered = false;
             _settings.HotkeyColorModifiers = 0;
             _settings.HotkeyColorVirtualKey = 0;
             SettingsStorage.Save(_settings);

@@ -84,17 +84,27 @@ public partial class App : System.Windows.Application
 			MainWindow = main;
 			if (forceShow)
 			{
+				if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] Force show requested via --force-show");
 				main.Show();
 			}
 			else if (settings.StartMinimizedToTray)
 			{
+				if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] Starting minimized to tray");
 				// Create HWND (fires SourceInitialized → hotkeys register) without showing the window.
-				_ = new WindowInteropHelper(main).EnsureHandle();
+				var helper = new WindowInteropHelper(main);
+				var hwnd = helper.EnsureHandle();
+				if (AppLogger.IsEnabled) AppLogger.Log($"[lifecycle] EnsureHandle returned: 0x{hwnd:X}");
+				
+				// Ensure hotkeys are registered now that handle exists
+				// (OnSourceInitialized may fire before handle is fully ready when starting minimized)
+				main.EnsureHotkeysRegistered();
+				
 				// Keep it in the tray without ever flashing a window.
 				main.MinimizeToTrayInitially();
 			}
 			else
 			{
+				if (AppLogger.IsEnabled) AppLogger.Log("[lifecycle] Showing window normally");
 				main.Show();
 			}
         }
