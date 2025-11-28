@@ -62,3 +62,5 @@ try {
     [GammaRestore]::ReleaseDC([IntPtr]::Zero, $hdc) | Out-Null
 }
 
+
+
