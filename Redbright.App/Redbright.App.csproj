@@ -12,7 +12,35 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>..\assets\icon_crop.ico</ApplicationIcon>
+    <!-- Single source of truth for version -->
+    <Version>1.2.5</Version>
   </PropertyGroup>
+
+  <!-- Capture git commit hash and detect dirty state (uncommitted changes) -->
+  <Target Name="SetBuildMetadata" BeforeTargets="GetAssemblyVersion;GenerateNuspec;CoreCompile">
+    <!-- Get git commit hash -->
+    <Exec Command="git rev-parse --short=7 HEAD" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitHash" />
+      <Output TaskParameter="ExitCode" PropertyName="GitHashExitCode" />
+    </Exec>
+    
+    <!-- Check for uncommitted changes -->
+    <Exec Command="git diff-index --quiet HEAD --" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="GitDirtyExitCode" />
+    </Exec>
+    
+    <PropertyGroup>
+      <GitCommitHash Condition="'$(GitHashExitCode)' == '0'">$(GitCommitHash.Trim())</GitCommitHash>
+      <GitCommitHash Condition="'$(GitHashExitCode)' != '0'">unknown</GitCommitHash>
+      <BuildTimestamp>$([System.DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss"))</BuildTimestamp>
+      
+      <!-- Build the InformationalVersion based on git state -->
+      <InformationalVersion Condition="'$(GitDirtyExitCode)' != '0'">$(Version)+$(GitCommitHash).dirty-$(BuildTimestamp)</InformationalVersion>
+      <InformationalVersion Condition="'$(GitDirtyExitCode)' == '0'">$(Version)+$(GitCommitHash)</InformationalVersion>
+    </PropertyGroup>
+    
+    <Message Importance="high" Text="Build version: $(InformationalVersion)" />
+  </Target>
 
   <ItemGroup>
     <Resource Include="..\\assets\\icon.png">

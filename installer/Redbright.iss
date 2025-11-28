@@ -2,18 +2,17 @@
 ; Requires Inno Setup 6.x (iscc.exe)
 
 #define MyAppName "Redbright"
-#define MyAppVersion "1.2.5"
 #define MyAppPublisher "Redbright"
 #define MyAppExeName "Redbright.App.exe"
+
+; Read version from the compiled assembly instead of hardcoding
+#define PublishDir "..\\Redbright.App\\bin\\Release\\net8.0-windows\\win-x64\\publish"
+#define MyAppVersion GetStringFileInfo(PublishDir + "\\" + MyAppExeName, "ProductVersion")
 
 ; Architecture tag (can be overridden via iscc.exe /DMyArch=...)
 #ifndef MyArch
 #define MyArch "x64"
 #endif
-
-; Path to published binaries (self-contained or framework-dependent)
-; Adjust if your publish path differs
-#define PublishDir "..\\Redbright.App\\bin\\Release\\net8.0-windows\\win-x64\\publish"
 
 [Setup]
 AppId={{A4D2F2B8-4E8E-4E01-9A8B-6E7A7E2F7C3B}}

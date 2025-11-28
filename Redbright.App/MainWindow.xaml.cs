@@ -1,5 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Reflection;
 using System.Windows;
 using Redbright.Core;
 using Forms = System.Windows.Forms;
@@ -74,6 +75,65 @@ namespace Redbright.App;
 			#if DEBUG
 			this.Title = "Redbright (Dev)";
 			#endif
+// Set version text with git commit hash and dirty state
+		try
+		{
+			var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+			var infoVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+			
+			if (!string.IsNullOrEmpty(infoVersion))
+			{
+				// InformationalVersion formats:
+				// - Clean: "1.2.5+abc1234"
+				// - Dirty: "1.2.5+abc1234.dirty-20251128-143022"
+				var parts = infoVersion.Split('+');
+				if (parts.Length > 1)
+				{
+					var metadata = parts[1];
+					var isDirty = metadata.Contains(".dirty-");
+					
+					// Extract just the commit hash (before .dirty if present)
+					var commitHash = isDirty ? metadata.Split('.')[0] : metadata;
+					var shortHash = commitHash.Length > 7 ? commitHash.Substring(0, 7) : commitHash;
+					
+					if (isDirty)
+					{
+						// Extract timestamp (format: yyyyMMdd-HHmmss)
+						var timestampMatch = System.Text.RegularExpressions.Regex.Match(metadata, @"\.dirty-(\d{8})-(\d{6})");
+						if (timestampMatch.Success)
+						{
+							var date = timestampMatch.Groups[1].Value;
+							var time = timestampMatch.Groups[2].Value;
+							var timestamp = $"{date.Substring(0, 4)}-{date.Substring(4, 2)}-{date.Substring(6, 2)} {time.Substring(0, 2)}:{time.Substring(2, 2)}";
+							VersionTextBlock.Text = $"v{parts[0]} ({shortHash}*) {timestamp}";
+						}
+						else
+						{
+							VersionTextBlock.Text = $"v{parts[0]} ({shortHash}*)";
+						}
+					}
+					else
+					{
+						VersionTextBlock.Text = $"v{parts[0]} ({shortHash})";
+					}
+				}
+				else
+				{
+					// No commit hash, just show version
+					VersionTextBlock.Text = $"v{infoVersion}";
+				}
+			}
+			else
+			{
+				// Fallback to assembly version
+				var version = assembly.GetName().Version;
+				if (version != null)
+				{
+					VersionTextBlock.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+				}
+			}
+		}
+		catch { /* ignore version display errors */ }
         InitializeTrayIcon();
 			// Initialize UI from settings
 			BrightnessSlider.Value = _settings.PauseBrightness ? 100.0 : _settings.BrightnessPercent;
