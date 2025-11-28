@@ -10,6 +10,9 @@
   </p>
 </div>
 
+
+![Redbright Application Showcase](assets/redbright_gif_1.webp)
+
 ## Features
 
 - Turn the screen red and black 
