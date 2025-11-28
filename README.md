@@ -13,11 +13,10 @@
 
 ![Redbright Application Showcase](assets/redbright_gif_1.webp)
 
-## Features
+## Main Features
 
 - Turn the screen red and black 
 - Dim brightness the better way 
-
 
 ## Technical Features
 - Tray icon with quick actions:
@@ -112,7 +111,7 @@ If `iscc.exe` is not found:
 
 ## Privacy
 
-- The app does not collect or transmit data. Logs are written locally only when a crash occurs.
+- The app does not collect or transmit data.
 
 ## License
 
